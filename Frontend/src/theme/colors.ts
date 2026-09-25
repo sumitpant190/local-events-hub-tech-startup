@@ -5,6 +5,7 @@ export type ColorPalette = {
   surface: string;
   surfaceElevated: string;
   primary: string;
+  onPrimary: string;
   accent: string;
   textPrimary: string;
   textSecondary: string;
@@ -18,6 +19,7 @@ export const darkColors: ColorPalette = {
   surface: '#151925',
   surfaceElevated: '#1E2333',
   primary: '#6C5CE7',
+  onPrimary: '#F5F6FA', // text on primary fills; stays light in both modes
   accent: '#22D3EE',
   textPrimary: '#F5F6FA',
   textSecondary: '#8B8FA3',

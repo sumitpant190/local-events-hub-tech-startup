@@ -54,3 +54,31 @@
 - EventDetails keeps the tab bar visible because it's pushed inside the Events tab's stack, not above the tabs.
 - EventsList uses three inline placeholder events with a staggered spring entrance. They'll be replaced by mock data and cards in a later phase.
 - Headers are hidden everywhere. Screens show their own titles through ScreenContainer, and EventDetails has a "Back to events" button (the swipe/hardware back also works).
+
+## Phase 3 — State & mock data
+**Date:** 2026-09-26
+**Summary:** Added Zustand stores for auth (isLoggedIn, currentUser) and events (events, selectedEvent, loading and error states), backed by a mock API over local data. The mock data covers 12 Tech & Startup events across six categories, 6 users and 26 comments. The existing screens now read from the stores, and the root navigator switches between Auth and Main based on `isLoggedIn`.
+**Files added/changed:**
+- Frontend/src/services/types.ts — User, EventItem, EventLocation, EventComment, EventCategory types
+- Frontend/src/services/mockData/events.ts — 12 events (hackathons, founder meetups, pitch nights, AI/ML workshops, demo days, panels, mixers)
+- Frontend/src/services/mockData/users.ts — 6 mock users
+- Frontend/src/services/mockData/comments.ts — 26 comments, 2–3 per event
+- Frontend/src/services/mockApi.ts — fetchEvents (600ms simulated latency), getEventComments, user lookups, demo login email
+- Frontend/src/store/authStore.ts — login(email), signup(name, email), logout()
+- Frontend/src/store/eventsStore.ts — loadEvents(), selectEvent(id), clearSelectedEvent()
+- Frontend/src/utils/validation.ts — email check and normalisation
+- Frontend/src/utils/date.ts — event date/time formatting
+- Frontend/src/navigation/RootNavigator.tsx — shows Auth or Main from authStore.isLoggedIn
+- Frontend/src/screens/{Login,Signup,Settings,Profile}Screen.tsx — call auth store actions / show current user
+- Frontend/src/screens/EventsListScreen.tsx — FlatList of store events with capped stagger
+- Frontend/src/screens/EventDetailsScreen.tsx — selects the event on mount and shows date, venue, attendance and comment count
+- Frontend/src/{store,services,utils}/.gitkeep — removed (folders now have files)
+**Commit:** `feat(data): add mock events, users and comments with typed models`, `feat(store): add auth and events zustand stores over mock api`, `refactor(nav): drive auth/main switch and screens from stores`, `docs: log phase 3 in git history`
+**Notes/decisions:**
+- Stores call `services/mockApi.ts` instead of reading the arrays directly, so the backend phase can swap in Axios without touching the stores or screens.
+- `login(email)` only accepts emails that exist in mockUsers, and the Login button logs in as the demo user (maya@loopdesk.io). `signup` checks the name and email and keeps the new user in memory only. Real form inputs come in the auth UI phase.
+- The auth switch now uses React Navigation's recommended conditional-screens pattern. Logging out plays a "pop" animation instead of a push.
+- `loadEvents` ignores repeat calls while a load is running, and on failure it sets a friendly error string.
+- Event venues and addresses are made up and have no city, since the target city hasn't been decided yet.
+- Dates are ISO-8601 in UTC and are formatted with the device locale.
+- The mock data was checked with a one-off Node script: unique IDs, valid user/event references, attendance within capacity, start before end, and at least 2 comments per event. There's still no test runner in the project, so store unit tests will come when one is added.

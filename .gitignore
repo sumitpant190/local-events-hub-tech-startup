@@ -1,0 +1,11 @@
+# Frontend-specific ignores live in Frontend/.gitignore
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# local tooling
+.jolli/
+.claude/settings.local.json

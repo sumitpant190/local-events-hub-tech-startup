@@ -2,12 +2,15 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import AppButton from '../components/AppButton';
 import ScreenContainer from '../components/ScreenContainer';
 import type { MainTabParamList } from '../navigation/types';
+import { useAuthStore } from '../store/authStore';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
 
 export default function ProfileScreen({ navigation }: Props) {
+  const currentUser = useAuthStore((state) => state.currentUser);
+
   return (
-    <ScreenContainer title="Profile" subtitle="Your saved events and RSVPs will live here.">
+    <ScreenContainer title={currentUser?.name ?? 'Profile'} subtitle={currentUser?.headline}>
       <AppButton label="Browse events" onPress={() => navigation.navigate('EventsTab', { screen: 'EventsList' })} />
       <AppButton label="Settings" variant="ghost" onPress={() => navigation.navigate('Settings')} />
     </ScreenContainer>

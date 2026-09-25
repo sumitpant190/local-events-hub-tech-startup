@@ -1,45 +1,61 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MotiView } from 'moti';
-import { StyleSheet, Text } from 'react-native';
+import { useEffect } from 'react';
+import { FlatList, StyleSheet, Text } from 'react-native';
 import PressableScale from '../components/PressableScale';
 import ScreenContainer from '../components/ScreenContainer';
 import type { EventsStackParamList } from '../navigation/types';
+import { useEventsStore } from '../store/eventsStore';
 import { useThemeColors } from '../theme/colors';
 import { STAGGER_MS, springs } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { formatEventDate } from '../utils/date';
 
 type Props = NativeStackScreenProps<EventsStackParamList, 'EventsList'>;
 
-// Placeholder rows until the events data layer lands.
-const PLACEHOLDER_EVENTS = [
-  { id: '1', title: 'Startup Pitch Night' },
-  { id: '2', title: 'React Native Meetup' },
-  { id: '3', title: 'AI Builders Hackathon' },
-];
+// Caps the stagger so items further down don't wait noticeably long.
+const MAX_STAGGERED_ITEMS = 8;
 
 export default function EventsListScreen({ navigation }: Props) {
   const colors = useThemeColors();
+  const events = useEventsStore((state) => state.events);
+  const isLoading = useEventsStore((state) => state.isLoading);
+  const error = useEventsStore((state) => state.error);
+  const loadEvents = useEventsStore((state) => state.loadEvents);
+
+  useEffect(() => {
+    if (events.length === 0) loadEvents();
+  }, [events.length, loadEvents]);
+
+  const status = isLoading ? 'Loading events…' : error ?? `${events.length} upcoming events`;
 
   return (
-    <ScreenContainer title="Events" subtitle="Tap an event to see details.">
-      {PLACEHOLDER_EVENTS.map((event, index) => (
-        <MotiView
-          key={event.id}
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ ...springs.entrance, delay: index * STAGGER_MS }}
-        >
-          <PressableScale
-            onPress={() => navigation.navigate('EventDetails', { eventId: event.id, title: event.title })}
-            accessibilityLabel={`Open ${event.title}`}
-            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+    <ScreenContainer title="Events" subtitle={status}>
+      <FlatList
+        data={events}
+        keyExtractor={(event) => event.id}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item, index }) => (
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ ...springs.entrance, delay: Math.min(index, MAX_STAGGERED_ITEMS) * STAGGER_MS }}
           >
-            <Text style={[typography.h3, { color: colors.textPrimary }]}>{event.title}</Text>
-            <Text style={[typography.caption, { color: colors.accent }]}>Details coming soon</Text>
-          </PressableScale>
-        </MotiView>
-      ))}
+            <PressableScale
+              onPress={() => navigation.navigate('EventDetails', { eventId: item.id, title: item.title })}
+              accessibilityLabel={`Open ${item.title}`}
+              style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text style={[typography.label, { color: colors.accent }]}>
+                {item.category} · {formatEventDate(item.startsAt)}
+              </Text>
+              <Text style={[typography.h3, { color: colors.textPrimary }]}>{item.title}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>{item.location.venue}</Text>
+            </PressableScale>
+          </MotiView>
+        )}
+      />
     </ScreenContainer>
   );
 }

@@ -1,8 +1,8 @@
 import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useColorScheme } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { useThemeColors } from '../theme/colors';
+import { useThemeScheme } from '../theme/themeContext';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
 import { stackScreenOptions } from './stackOptions';
@@ -13,7 +13,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const colors = useThemeColors();
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
-  const base = useColorScheme() === 'light' ? DefaultTheme : DarkTheme;
+  const base = useThemeScheme().scheme === 'light' ? DefaultTheme : DarkTheme;
   const theme: Theme = {
     ...base,
     colors: {

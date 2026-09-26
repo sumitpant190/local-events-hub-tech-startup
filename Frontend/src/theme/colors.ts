@@ -1,4 +1,4 @@
-import { useColorScheme } from 'react-native';
+import { useThemeScheme } from './themeContext';
 
 export type ColorPalette = {
   background: string;
@@ -46,5 +46,5 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 export function useThemeColors(): ColorPalette {
-  return useColorScheme() === 'light' ? lightColors : darkColors;
+  return useThemeScheme().scheme === 'light' ? lightColors : darkColors;
 }

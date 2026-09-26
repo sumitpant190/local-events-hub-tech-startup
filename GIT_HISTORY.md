@@ -187,3 +187,35 @@
 - Posting isn't optimistic. The send button shows a spinner for the 350ms mock write, then the comment animates in. This avoids temporary IDs and reconciliation for a single-author action.
 - Comments live in memory for the session. The mock API doesn't keep them after a reload.
 - The sanitizer and relative-time formatter were checked with a one-off Node assert script covering trim, script and tag stripping (case, attributes, multiline), control characters, blank-line collapsing, keeping plain `<` and `>`, the length cap with trailing trim, and each time bucket.
+
+## Phase 8 — Profile & Settings
+**Date:** 2026-09-26
+**Summary:** Added a real ThemeContext so a Settings switch flips the whole app between the Phase 1 dark and light palettes, with a soft crossfade. Profile now shows a springy avatar, name, email and headline, the user's RSVP'd events as animated rows, and an "Edit profile" bottom sheet with validation. Settings has spring-physics switches for dark mode and three UI-only notification preferences, an account summary, and a Log out button that clears authStore and animates back to Login.
+**Files added/changed:**
+- Frontend/src/theme/themeContext.ts — ThemeContext, ColorScheme type, useThemeScheme()
+- Frontend/src/theme/ThemeProvider.tsx — holds the scheme (starts from the device setting), setScheme/toggleScheme, crossfades from the old background on change
+- Frontend/src/theme/colors.ts — useThemeColors() now reads ThemeContext instead of the device scheme
+- Frontend/src/navigation/RootNavigator.tsx — navigation theme follows ThemeContext
+- Frontend/src/components/AppShell.tsx — fonts, splash and navigator moved out of App.tsx so they sit inside the provider; status bar follows the scheme
+- Frontend/App.tsx — now just ThemeProvider → AppShell
+- Frontend/src/components/SpringSwitch.tsx — custom switch: spring thumb that stretches while pressed, animated track color, switch accessibility role
+- Frontend/src/components/BottomSheetModal.tsx — Modal with backdrop fade and spring slide up/down; stays mounted until the close animation ends
+- Frontend/src/components/EditProfileForm.tsx — name and headline fields with validation; email read-only
+- Frontend/src/components/EventListItem.tsx — compact tappable event row
+- Frontend/src/components/SettingsGroup.tsx — titled settings card
+- Frontend/src/components/InfoRow.tsx — optional `right` slot for trailing controls
+- Frontend/src/components/AppButton.tsx — added `danger` variant
+- Frontend/src/store/authStore.ts — updateProfile({ name, headline })
+- Frontend/src/services/mockApi.ts — updateAccountProfile() so comment authors and organizer lookups show the new name
+- Frontend/src/utils/validation.ts — validateProfile(), MAX_HEADLINE_LENGTH (80)
+- Frontend/src/screens/ProfileScreen.tsx — profile header, My RSVPs list with empty state, edit sheet
+- Frontend/src/screens/SettingsScreen.tsx — Appearance, Notifications and Account groups, Log out
+**Commit:** `feat(theme): add ThemeContext with animated dark/light switching`, `feat(ui): add spring switch, bottom sheet and settings components`, `feat(profile): add rsvp list and edit-profile sheet to profile`, `feat(settings): add theme, notification and logout settings`, `docs: log phase 8 in git history`
+**Notes/decisions:**
+- The context object lives in `themeContext.ts` with no palette imports, so `colors.ts` can read it without a circular dependency. Because `useThemeColors()` kept its signature, all existing components follow the toggle without edits.
+- The theme choice is kept in memory: it starts from the device setting on each launch. Persisting it needs AsyncStorage, which isn't installed yet.
+- A theme change swaps colors instantly underneath a full-screen overlay in the previous background color, which fades out over 320ms. Components that already animate colors with moti also transition on their own.
+- Log out only clears authStore. RootNavigator's conditional screens swap Main for Auth using the "pop" direction of the shared fade-and-slide transition. RSVPs and comments stay for the session, as noted in Phases 6 and 7.
+- RSVP rows open EventDetails inside the Events tab with `initial: false`, so back returns to the events list, not Profile.
+- The notification switches are UI only (local state). They reset when the Settings screen unmounts, for example after logout.
+- Profile validation was checked with a one-off Node assert script covering valid input, an allowed empty headline, blank and too-long names, and headline length measured after trimming.

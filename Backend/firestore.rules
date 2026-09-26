@@ -57,10 +57,10 @@ service cloud.firestore {
       return existsAfter(path) && getAfter(path).data.status == 'going';
     }
 
-    // The event's attendeeCount after this commit equals the stored count plus `delta`.
-    function attendeeCountMovesBy(eventId, delta) {
+    // The event's counter (attendeeCount / commentCount) after this commit equals the stored value plus `delta`.
+    function counterMovesBy(eventId, field, delta) {
       let path = /databases/$(database)/documents/events/$(eventId);
-      return getAfter(path).data.attendeeCount == get(path).data.attendeeCount + delta;
+      return getAfter(path).data[field] == get(path).data[field] + delta;
     }
 
     // ---------- users ----------
@@ -140,6 +140,16 @@ service cloud.firestore {
         && request.resource.data.attendeeCount
              == resource.data.attendeeCount + goingDelta(callerWasGoing(eventId), callerWillBeGoing(eventId));
 
+      // Comment counter: any signed-in user may move ONLY commentCount, by exactly +1/-1 from the stored
+      // value. The comment rules below require that move whenever a comment is created or deleted.
+      // ponytail: comment ids are random, so this rule can't verify a comment exists in the same commit;
+      // a tampered client can nudge the count by 1 per write without commenting. Closing it needs a
+      // server trigger (Blaze) or deterministic comment ids.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
+        && request.resource.data.commentCount - resource.data.commentCount in [1, -1]
+        && request.resource.data.commentCount >= 0;
+
       allow delete: if isOrganizerOrAdmin()
         && (resource.data.organizerId == request.auth.uid || isAdmin());
 
@@ -156,7 +166,7 @@ service cloud.firestore {
           && hasExactly(request.resource.data, ['status', 'updatedAt'])
           && request.resource.data.status in ['going', 'not_going']
           && request.resource.data.updatedAt == request.time
-          && attendeeCountMovesBy(eventId, goingDelta(
+          && counterMovesBy(eventId, 'attendeeCount', goingDelta(
                resource != null && resource.data.status == 'going',
                request.resource.data.status == 'going'));
       }
@@ -166,7 +176,8 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if isSignedIn();
 
-        // Post as yourself only: non-blank text under 500 characters, server timestamp.
+        // Post as yourself only: non-blank text under 500 characters, server timestamp, and committed
+        // together with commentCount +1 (so the count can't drift from the real number of comments).
         allow create: if isSignedIn()
           && eventExists(eventId)
           && hasExactly(request.resource.data, ['userId', 'text', 'createdAt'])
@@ -174,10 +185,13 @@ service cloud.firestore {
           && request.resource.data.text is string
           && request.resource.data.text.trim().size() > 0
           && request.resource.data.text.size() < 500
-          && request.resource.data.createdAt == request.time;
+          && request.resource.data.createdAt == request.time
+          && counterMovesBy(eventId, 'commentCount', 1);
 
-        // Comments are immutable: no update rule. Only the author or an admin can delete.
-        allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+        // Comments are immutable: no update rule. Only the author or an admin can delete, with commentCount -1.
+        allow delete: if isSignedIn()
+          && (resource.data.userId == request.auth.uid || isAdmin())
+          && counterMovesBy(eventId, 'commentCount', -1);
       }
     }
 

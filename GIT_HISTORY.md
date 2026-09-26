@@ -483,3 +483,36 @@
 - **Rule cost:** an RSVP commit makes about 6 document lookups (get/getAfter/exists) across the two writes. That's within the 20-per-batch limit, and each counts as a read against the free quota.
 - **Not covered yet:** `commentCount` is still frozen for all clients. That's the comments phase, with the same pairing pattern.
 - **Blaze check:** client transaction plus rules only; no Cloud Functions, and nothing needs Blaze.
+
+## Phase 6 — Comments
+**Date:** 2026-09-27
+**Summary:** Real-time comments need no backend code: the app subscribes with Firestore's own `onSnapshot` on `events/{eventId}/comments`. Added a reference `commentService` that posts or deletes a comment and moves `commentCount` by ±1 in one client-side transaction (the Phase 5 technique). The rules now require that pairing, so the count can't drift without a server trigger.
+**Files added/changed:**
+- Backend/src/services/commentService.ts — new: `addComment()` (transaction: event exists → create comment with `serverTimestamp()` + `commentCount: increment(1)`) and `deleteComment()` (transaction: comment exists → delete + `increment(-1)`)
+- Backend/firestore.rules:
+  - `attendeeCountMovesBy` generalised to `counterMovesBy(eventId, field, delta)`;
+  - new events update path: `commentCount` alone, by exactly ±1 from the stored value, never below 0;
+  - comment create requires `commentCount` +1 in the same commit; comment delete requires −1.
+- Backend/tests/comments.emulator.test.ts — new, 5 tests: post then delete (count 1 → 0); 5 users commenting at once → 5; the same comment deleted from two devices at once decrements only once; deleting someone else's comment through the service is refused; an `onSnapshot` listener receives another user's comment live
+- Backend/tests/rules.emulator.test.ts — fixture event starts at `commentCount: 2` to match its comments; comment tests now commit the comment and counter together; 4 new counter tests
+- Backend/package.json — `test:emulator` also runs the comment tests
+- README.md — "Comments (real-time, no server)": `onSnapshot` snippet, `commentService` usage, what the rules enforce and the known limit; access table and scripts table updated
+**Commit:** `feat(comments): pair comment writes with atomic commentCount transaction`
+**Verified:**
+- `npm run typecheck`: clean.
+- `npm run test:emulator`: **82/82 pass, on 3 back-to-back runs** (all exit 0, no emulator left listening).
+- **Mutation checks** (rules restored byte-identical afterwards): each failed 2 tests.
+  - Dropping the create ↔ counter pairing.
+  - Dropping the delete ↔ counter pairing.
+  - Letting `commentCount` take any value.
+- `npm run emulators`: "All emulators ready!" with no errors; `npm run seed:emulator` still seeds 4 users, 12 events, 28 RSVPs and 24 comments.
+**Notes/decisions:**
+- **Phase 4 comment validation re-checked:** author = caller, exact fields, non-blank text under 500 characters, `createdAt == request.time`, event must exist, no updates, delete by author or admin. All of that was already in place and is unchanged. The only gap was `commentCount`, which Phase 4 froze.
+- **New negative cases tested:**
+  - posting without the +1, and deleting without the −1 (as a plain write and in a batch);
+  - moving the count by +2, or the wrong way (for a post or a delete);
+  - changing `title` or `attendeeCount` alongside `commentCount`;
+  - setting `commentCount` to 999, or below 0.
+- **Known limit (accepted):** comment ids are random, so the event rule can't check that a comment exists in the same commit. A tampered client can nudge `commentCount` by ±1 per write (never below 0) without commenting. Legitimate clients can't drift, because every comment create and delete must carry the ±1. Closing the gap would need a Cloud Function trigger (Blaze, not allowed) or deterministic comment ids, which can collide after deletes. It's accepted because the count is display-only.
+- **Deleting a comment on a deleted event** is refused, because the counter check has no event to read. Orphaned comments are cleaned up from the Console. This is the same orphan issue as noted in Phase 4.
+- **Blaze check:** `onSnapshot`, client transactions and rules only; no Cloud Functions, and nothing needs Blaze.

@@ -74,8 +74,8 @@ beforeEach(async () => {
     ] as const) {
       await setDoc(doc(admin, 'users', uid), profile(uid, role));
     }
-    // Two "going" RSVPs below, so the counter starts at 2.
-    await setDoc(doc(admin, EVENT), { ...eventData('olivia'), attendeeCount: 2 });
+    // Two "going" RSVPs and two comments below, so both counters start at 2.
+    await setDoc(doc(admin, EVENT), { ...eventData('olivia'), attendeeCount: 2, commentCount: 2 });
     await setDoc(doc(admin, EVENT, 'rsvps', 'alice'), { status: 'going', updatedAt: serverTimestamp() });
     await setDoc(doc(admin, EVENT, 'rsvps', 'bob'), { status: 'going', updatedAt: serverTimestamp() });
     await setDoc(doc(admin, EVENT, 'comments', 'c-alice'), { userId: 'alice', text: 'See you there', createdAt: serverTimestamp() });
@@ -316,39 +316,81 @@ describe('rsvps', () => {
 describe('comments', () => {
   const comment = (userId: string, text = 'Looking forward to it!') => ({ userId, text, createdAt: serverTimestamp() });
 
-  test('CAN post a comment as themselves', async () => {
-    await assertSucceeds(setDoc(doc(db('alice'), EVENT, 'comments', 'c-new'), comment('alice')));
+  /** Creates comments/c-new as `uid`, plus (optionally) the event fields in the same atomic commit. */
+  function commitComment(uid: string, data: object, eventUpdate: object | null = { commentCount: 3 }) {
+    const firestore = db(uid);
+    const batch = writeBatch(firestore);
+    batch.set(doc(firestore, EVENT, 'comments', 'c-new'), data);
+    if (eventUpdate) batch.update(doc(firestore, EVENT), eventUpdate);
+    return batch.commit();
+  }
+
+  /** Deletes comments/{commentId} as `uid`, plus (optionally) the event fields in the same atomic commit. */
+  function commitDelete(uid: string, commentId: string, eventUpdate: object | null = { commentCount: 1 }) {
+    const firestore = db(uid);
+    const batch = writeBatch(firestore);
+    batch.delete(doc(firestore, EVENT, 'comments', commentId));
+    if (eventUpdate) batch.update(doc(firestore, EVENT), eventUpdate);
+    return batch.commit();
+  }
+
+  test('CAN post a comment as themselves (with the +1 in the same commit)', async () => {
+    await assertSucceeds(commitComment('alice', comment('alice')));
   });
 
   test('CAN post a 499-character comment', async () => {
-    await assertSucceeds(setDoc(doc(db('alice'), EVENT, 'comments', 'c-new'), comment('alice', 'x'.repeat(499))));
+    await assertSucceeds(commitComment('alice', comment('alice', 'x'.repeat(499))));
   });
 
   test('CAN read comments when signed in', async () => {
     await assertSucceeds(getDocs(collection(db('bob'), EVENT, 'comments')));
   });
 
-  test('CAN delete their own comment, and an admin CAN delete anyone’s', async () => {
-    await assertSucceeds(deleteDoc(doc(db('alice'), EVENT, 'comments', 'c-alice')));
-    await assertSucceeds(deleteDoc(doc(db('adam'), EVENT, 'comments', 'c-bob')));
+  test('CAN delete their own comment, and an admin CAN delete anyone’s (with the -1 in the same commit)', async () => {
+    await assertSucceeds(commitDelete('alice', 'c-alice'));
+    await assertSucceeds(commitDelete('adam', 'c-bob', { commentCount: 0 }));
   });
 
   test('CANNOT post as someone else', async () => {
-    await assertFails(setDoc(doc(db('alice'), EVENT, 'comments', 'c-new'), comment('bob')));
+    await assertFails(commitComment('alice', comment('bob')));
   });
 
   test('CANNOT post empty, whitespace-only or 500+ character text', async () => {
-    const ref = doc(db('alice'), EVENT, 'comments', 'c-new');
-    await assertFails(setDoc(ref, comment('alice', '')));
-    await assertFails(setDoc(ref, comment('alice', '   \n ')));
-    await assertFails(setDoc(ref, comment('alice', 'x'.repeat(500))));
-    await assertFails(setDoc(ref, { userId: 'alice', text: 42, createdAt: serverTimestamp() }));
+    await assertFails(commitComment('alice', comment('alice', '')));
+    await assertFails(commitComment('alice', comment('alice', '   \n ')));
+    await assertFails(commitComment('alice', comment('alice', 'x'.repeat(500))));
+    await assertFails(commitComment('alice', { userId: 'alice', text: 42, createdAt: serverTimestamp() }));
   });
 
   test('CANNOT backdate createdAt or add extra fields', async () => {
-    const ref = doc(db('alice'), EVENT, 'comments', 'c-new');
-    await assertFails(setDoc(ref, { ...comment('alice'), createdAt: Timestamp.fromDate(new Date('2020-01-01')) }));
-    await assertFails(setDoc(ref, { ...comment('alice'), pinned: true }));
+    await assertFails(commitComment('alice', { ...comment('alice'), createdAt: Timestamp.fromDate(new Date('2020-01-01')) }));
+    await assertFails(commitComment('alice', { ...comment('alice'), pinned: true }));
+  });
+
+  test('CANNOT post without the matching +1 on commentCount', async () => {
+    await assertFails(commitComment('alice', comment('alice'), null));
+    await assertFails(setDoc(doc(db('alice'), EVENT, 'comments', 'c-new'), comment('alice')));
+  });
+
+  test('CANNOT delete without the matching -1 on commentCount', async () => {
+    await assertFails(commitDelete('alice', 'c-alice', null));
+    await assertFails(deleteDoc(doc(db('alice'), EVENT, 'comments', 'c-alice')));
+  });
+
+  test('CANNOT move commentCount by more than one, the wrong way, or alongside other fields', async () => {
+    await assertFails(commitComment('alice', comment('alice'), { commentCount: 4 }));
+    await assertFails(commitComment('alice', comment('alice'), { commentCount: 1 }));
+    await assertFails(commitDelete('alice', 'c-alice', { commentCount: 3 }));
+    await assertFails(commitComment('alice', comment('alice'), { commentCount: 3, title: 'Hijacked' }));
+    await assertFails(commitComment('alice', comment('alice'), { commentCount: 3, attendeeCount: 50 }));
+  });
+
+  test('CANNOT set commentCount to an arbitrary value or below zero', async () => {
+    await assertFails(updateDoc(doc(db('alice'), EVENT), { commentCount: 999 }));
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore() as unknown as Firestore, EVENT), { commentCount: 0 });
+    });
+    await assertFails(updateDoc(doc(db('alice'), EVENT), { commentCount: -1 }));
   });
 
   test("CANNOT edit someone else's comment", async () => {
@@ -360,8 +402,8 @@ describe('comments', () => {
   });
 
   test("CANNOT delete someone else's comment (not even the event organizer)", async () => {
-    await assertFails(deleteDoc(doc(db('alice'), EVENT, 'comments', 'c-bob')));
-    await assertFails(deleteDoc(doc(db('olivia'), EVENT, 'comments', 'c-bob')));
+    await assertFails(commitDelete('alice', 'c-bob'));
+    await assertFails(commitDelete('olivia', 'c-bob'));
   });
 
   test('CANNOT comment on an event that does not exist', async () => {

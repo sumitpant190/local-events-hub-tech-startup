@@ -125,7 +125,7 @@ It needs no service account key.
 | `npm run emulators` | Start the Auth + Firestore emulators and the Emulator UI |
 | `npm run seed:emulator` | Wipe and re-seed the emulators |
 | `npm test` | Unit tests (no emulator needed) |
-| `npm run test:emulator` | Start throwaway emulators, run the emulator tests (signup flow + security rules), stop them |
+| `npm run test:emulator` | Start throwaway emulators, run the emulator tests (signup, security rules, RSVP and comment races), stop them |
 | `npm run typecheck` | TypeScript check |
 
 ### Link the real Firebase project (Spark plan)
@@ -174,9 +174,9 @@ Everything is denied unless listed here. Roles come from `users/{uid}.role`, rea
 | Path | Read | Create | Update | Delete |
 |---|---|---|---|---|
 | `users/{uid}` | signed in | own uid only, `role: "attendee"`, own login email | own `name`/`avatarUrl` only (never `role` or `email`); admins may also change `role` | nobody |
-| `events/{id}` | signed in | organizer/admin; `organizerId` = self (admins: anyone); counters start at 0 | owner organizer or admin; can't change `organizerId` (admins can) or the counters. **Plus** any signed-in user may change `attendeeCount` alone, by exactly the ±1 their own RSVP makes in the same commit | owner organizer or admin |
+| `events/{id}` | signed in | organizer/admin; `organizerId` = self (admins: anyone); counters start at 0 | owner organizer or admin; can't change `organizerId` (admins can) or the counters. **Plus** any signed-in user may change `attendeeCount` alone, by exactly the ±1 their own RSVP makes in the same commit, or `commentCount` alone, by ±1 | owner organizer or admin |
 | `events/{id}/rsvps/{uid}` | signed in | own uid only; `status` `going`/`not_going`; `updatedAt: serverTimestamp()`; committed together with the matching `attendeeCount` change | same as create | nobody (cancel = `not_going`) |
-| `events/{id}/comments/{cid}` | signed in | `userId` = self; non-blank `text` under 500 characters; `createdAt: serverTimestamp()` | nobody (comments are immutable) | author or admin |
+| `events/{id}/comments/{cid}` | signed in | `userId` = self; non-blank `text` under 500 characters; `createdAt: serverTimestamp()`; committed together with `commentCount` +1 | nobody (comments are immutable) | author or admin, committed together with `commentCount` −1 |
 
 The frontend must follow these:
 - **Timestamps:** write `updatedAt` and `createdAt` with `serverTimestamp()`. Client clock values are rejected.
@@ -207,6 +207,36 @@ Inside one `runTransaction`, it:
 - **What the rules add:** the counter may only move by exactly the ±1 your own RSVP makes in the same commit, checked against the stored value. A buggy or tampered client that writes `count + 1` from a stale read, or bumps the count without RSVPing, gets `permission-denied` instead of corrupting the number.
 
 In the UI, disable the RSVP button while a toggle is in flight, and show the error if one is thrown (e.g. `permission-denied` if the same account toggled from two devices at the same instant; tapping again works).
+
+### Comments (real-time, no server)
+
+**Reading is Firestore's own listener.** There is nothing to build for "real-time": subscribe to the subcollection and Firestore pushes every new or deleted comment to all open screens.
+
+```ts
+import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+
+useEffect(() => {
+  const q = query(collection(db, 'events', eventId, 'comments'), orderBy('createdAt', 'desc'), limit(50));
+  return onSnapshot(q, (snap) => {
+    // serverTimestamps: 'estimate' fills createdAt for your own just-posted comment until the server confirms it.
+    setComments(snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })));
+  }, (error) => setError(error.message));
+}, [eventId]); // returning onSnapshot's unsubscribe stops the listener on unmount
+```
+
+**Writing goes through `Backend/src/services/commentService.ts`.** There is no Cloud Function trigger on Spark to keep `commentCount` up to date, so the count is maintained by the same client-side transaction technique as RSVPs:
+
+```ts
+import { addComment, deleteComment } from './commentService';
+
+const commentId = await addComment(db, eventId, auth.currentUser!.uid, text);
+await deleteComment(db, eventId, commentId); // author or admin
+```
+
+- **`addComment`** runs one `runTransaction`. It checks the event still exists, creates the comment (`createdAt: serverTimestamp()`) and applies `commentCount: increment(1)` in the same commit.
+- **`deleteComment`** reads the comment first, then deletes it and applies `increment(-1)`. A double tap or a second device finds the comment already gone and can't decrement twice.
+- **What the rules enforce:** a comment can't be created or deleted unless `commentCount` moves by exactly +1/−1 in the same commit. The count can therefore never drift from the real number of comments through the app.
+- **Known limit:** comment ids are random, so the rules can't tell whether a lone `commentCount` ±1 write comes with a comment. A tampered client could nudge the count by 1 per write (never below 0) without commenting. Closing that needs a server-side trigger (Blaze) or deterministic comment ids. It's accepted here because the count is display-only.
 
 ### Promoting a user to organizer or admin
 

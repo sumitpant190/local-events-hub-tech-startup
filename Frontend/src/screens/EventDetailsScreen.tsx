@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MotiText } from 'moti';
 import { useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnimatedMessage from '../components/AnimatedMessage';
@@ -9,6 +9,7 @@ import AttendeePreview from '../components/AttendeePreview';
 import BackButton from '../components/BackButton';
 import CapacityBar from '../components/CapacityBar';
 import CategoryBadge from '../components/CategoryBadge';
+import CommentsSection from '../components/CommentsSection';
 import EmptyState from '../components/EmptyState';
 import EventHero from '../components/EventHero';
 import FadeInUp from '../components/FadeInUp';
@@ -75,11 +76,15 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
   const spotsLeft = Math.max(event.capacity - event.attendeeCount, 0);
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scroll}
       >
         <EventHero category={event.category} scrollY={scrollY} />
@@ -125,6 +130,10 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
               ))}
             </View>
           </FadeInUp>
+
+          <FadeInUp index={5} style={styles.section}>
+            <CommentsSection eventId={event.id} />
+          </FadeInUp>
         </View>
       </Animated.ScrollView>
 
@@ -153,7 +162,7 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
           <RsvpButton isGoing={isGoing} isFull={isEventFull(event)} onPress={() => toggleRsvp(event.id)} />
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

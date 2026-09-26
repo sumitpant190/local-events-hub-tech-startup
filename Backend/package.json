@@ -11,7 +11,7 @@
     "emulators": "node node_modules/firebase-tools/lib/bin/firebase.js emulators:start --project demo-local-events-hub",
     "seed:emulator": "node scripts/seed.ts",
     "test": "node --test tests/emulatorGuard.test.ts",
-    "test:emulator": "node node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --project demo-local-events-hub --only auth,firestore \"node scripts/runEmulatorTests.ts tests/signup.emulator.test.ts tests/rules.emulator.test.ts\"",
+    "test:emulator": "node node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --project demo-local-events-hub --only auth,firestore \"node scripts/runEmulatorTests.ts tests/signup.emulator.test.ts tests/rules.emulator.test.ts tests/rsvp.emulator.test.ts\"",
     "typecheck": "node node_modules/typescript/bin/tsc"
   },
   "devDependencies": {

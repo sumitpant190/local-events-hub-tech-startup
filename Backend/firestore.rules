@@ -41,6 +41,28 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/events/$(eventId));
     }
 
+    // attendeeCount delta for an RSVP status change: +1 joining, -1 leaving, 0 otherwise.
+    function goingDelta(wasGoing, isGoing) {
+      return wasGoing == isGoing ? 0 : (isGoing ? 1 : -1);
+    }
+
+    // The caller's own RSVP before (get) and after (getAfter) the current commit.
+    function callerWasGoing(eventId) {
+      let path = /databases/$(database)/documents/events/$(eventId)/rsvps/$(request.auth.uid);
+      return exists(path) && get(path).data.status == 'going';
+    }
+
+    function callerWillBeGoing(eventId) {
+      let path = /databases/$(database)/documents/events/$(eventId)/rsvps/$(request.auth.uid);
+      return existsAfter(path) && getAfter(path).data.status == 'going';
+    }
+
+    // The event's attendeeCount after this commit equals the stored count plus `delta`.
+    function attendeeCountMovesBy(eventId, delta) {
+      let path = /databases/$(database)/documents/events/$(eventId);
+      return getAfter(path).data.attendeeCount == get(path).data.attendeeCount + delta;
+    }
+
     // ---------- users ----------
 
     function isValidProfile(data) {
@@ -109,6 +131,15 @@ service cloud.firestore {
         && request.resource.data.attendeeCount == resource.data.attendeeCount
         && request.resource.data.commentCount == resource.data.commentCount;
 
+      // RSVP counter: any signed-in user may move ONLY attendeeCount, by exactly the change their own
+      // RSVP undergoes in the same commit. Compared against the stored count, so stale writes fail.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attendeeCount'])
+        && request.resource.data.attendeeCount != resource.data.attendeeCount
+        && request.resource.data.attendeeCount >= 0
+        && request.resource.data.attendeeCount
+             == resource.data.attendeeCount + goingDelta(callerWasGoing(eventId), callerWillBeGoing(eventId));
+
       allow delete: if isOrganizerOrAdmin()
         && (resource.data.organizerId == request.auth.uid || isAdmin());
 
@@ -117,13 +148,17 @@ service cloud.firestore {
       match /rsvps/{userId} {
         allow read: if isSignedIn();
 
-        // Only your own RSVP (doc id == your uid), on an existing event, with a server timestamp.
+        // Only your own RSVP (doc id == your uid), on an existing event, with a server timestamp, and
+        // committed together with the matching attendeeCount change (see the events counter rule).
         // No delete: cancelling is status "not_going", so the RSVP always pairs with the attendee count.
         allow create, update: if isSelf(userId)
           && eventExists(eventId)
           && hasExactly(request.resource.data, ['status', 'updatedAt'])
           && request.resource.data.status in ['going', 'not_going']
-          && request.resource.data.updatedAt == request.time;
+          && request.resource.data.updatedAt == request.time
+          && attendeeCountMovesBy(eventId, goingDelta(
+               resource != null && resource.data.status == 'going',
+               request.resource.data.status == 'going'));
       }
 
       // ---------- events/{eventId}/comments/{commentId} ----------

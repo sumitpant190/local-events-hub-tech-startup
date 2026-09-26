@@ -443,3 +443,43 @@
 - **Cost:** each role check is one `get()`, which counts as one document read against the free daily quota. Within one request, repeated `get()`s of the same doc are counted once.
 - **Not deployed:** the rules are only verified on the emulator. Deploy with `npm run firebase -- deploy --only firestore:rules` (targets `events-hub-techstartup`).
 - **Blaze check:** rules only; nothing needs Blaze.
+
+## Phase 5 — RSVP
+**Date:** 2026-09-27
+**Summary:** Added a reference `toggleRsvp()` that runs as a client-side `runTransaction`. It reads the event and the caller's RSVP, flips the status, and writes the RSVP plus `attendeeCount: increment(±1)` atomically. Added paired rules so `attendeeCount` can move only by exactly the change the caller's own RSVP makes in the same commit, and emulator race tests proving concurrent RSVPs end with a correct count.
+**Files added/changed:**
+- Backend/src/services/rsvpService.ts — `toggleRsvp(db, eventId, uid)`, which returns `{status, attendeeCount}`
+- Backend/firestore.rules:
+  - **Helpers:** `goingDelta`, `callerWasGoing` (`get`), `callerWillBeGoing` (`getAfter`), `attendeeCountMovesBy`.
+  - **New events `update` path:** any signed-in user may change only `attendeeCount`, by exactly their own RSVP's non-zero delta, compared against the stored count, and never below 0.
+  - **RSVP create/update:** now requires `getAfter(event).attendeeCount == get(event).attendeeCount + delta`.
+- Backend/tests/rsvp.emulator.test.ts — 5 tests:
+  - one user joining then leaving;
+  - 2 users at once, which ends at 2;
+  - 5 users at once, which ends at 5;
+  - one user on two devices at once, where the count always matches the "going" docs;
+  - a naive read-then-write race, where the stale write is rejected and the count stays correct.
+- Backend/tests/rules.emulator.test.ts — the fixture event starts at `attendeeCount: 2` to match its RSVPs; RSVP tests now commit the RSVP and counter together; 7 new counter tests
+- Backend/package.json — `test:emulator` also runs the RSVP tests
+- README.md — "RSVP (client-side transaction)": usage, why a transaction is needed without a server, and what the rules add; the access table is updated
+**Commit:** `feat(rsvp): add transaction-safe RSVP toggle with atomic count update`
+**Verified:**
+- `npm run typecheck`: clean.
+- `npm test`: 5/5 pass.
+- `npm run test:emulator`: **73/73 pass, on 3 back-to-back runs** (all exit 0, no emulator left listening).
+- **Mutation checks** (rules restored byte-identical afterwards):
+  - Letting the event counter accept any value failed 2 tests ("can't change attendeeCount without an RSVP change", and "organizer can't edit counters").
+  - Dropping the RSVP ↔ counter pairing failed 2 tests (RSVP going without +1, and cancelling without −1).
+- `npm run emulators`: "All emulators ready!" with no errors; `npm run seed:emulator` still seeds 4 users, 12 events, 28 RSVPs and 24 comments.
+**Notes/decisions:**
+- **New negative cases tested:**
+  - RSVP going without the +1; cancelling without the −1;
+  - changing `attendeeCount` with no RSVP change (as an attendee and as an organizer);
+  - moving the count by +2, or the wrong way (for a join or a leave);
+  - changing `title` or `commentCount` alongside the counter;
+  - a naive stale read-then-write.
+- **Why `increment()` rather than "read count + 1":** the first version wrote the absolute value it read inside the transaction. Under a true 5-user race on the emulator, 2–3 of the 5 RSVPs were refused with `permission-denied`. The count never went wrong, but the users got errors. The rules correctly refuse a count computed from a read another RSVP has overtaken, and the emulator reports that as a rule failure, which the SDK doesn't retry, rather than as a retryable contention abort. With `increment(±1)` the server applies the change to the value it holds at commit: 5/5 succeeded over 3 rounds with the right final count. That comparison was a throwaway diagnostic (V0 explicit value, V1 read event + increment, V2 read only the RSVP + increment) and was deleted after use. V1 was chosen because it keeps the requested design (read the event and the RSVP in the transaction).
+- **The same account on two devices at the same instant:** the second toggle can be refused with `permission-denied`, because the RSVP it read as missing was created underneath it. The count still always equals the "going" RSVPs; the test asserts this invariant rather than a particular winner. The README tells the frontend to disable the button while a toggle is in flight and to show the error; tapping again works. This is emulator-verified only; production behaviour under this exact race isn't verified.
+- **Rule cost:** an RSVP commit makes about 6 document lookups (get/getAfter/exists) across the two writes. That's within the 20-per-batch limit, and each counts as a read against the free quota.
+- **Not covered yet:** `commentCount` is still frozen for all clients. That's the comments phase, with the same pairing pattern.
+- **Blaze check:** client transaction plus rules only; no Cloud Functions, and nothing needs Blaze.

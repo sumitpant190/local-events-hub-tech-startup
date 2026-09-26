@@ -18,6 +18,7 @@ import {
   setLogLevel,
   Timestamp,
   updateDoc,
+  writeBatch,
   type Firestore,
 } from 'firebase/firestore';
 import { resolveEmulatorTarget } from '../scripts/emulatorGuard.ts';
@@ -73,7 +74,8 @@ beforeEach(async () => {
     ] as const) {
       await setDoc(doc(admin, 'users', uid), profile(uid, role));
     }
-    await setDoc(doc(admin, EVENT), eventData('olivia'));
+    // Two "going" RSVPs below, so the counter starts at 2.
+    await setDoc(doc(admin, EVENT), { ...eventData('olivia'), attendeeCount: 2 });
     await setDoc(doc(admin, EVENT, 'rsvps', 'alice'), { status: 'going', updatedAt: serverTimestamp() });
     await setDoc(doc(admin, EVENT, 'rsvps', 'bob'), { status: 'going', updatedAt: serverTimestamp() });
     await setDoc(doc(admin, EVENT, 'comments', 'c-alice'), { userId: 'alice', text: 'See you there', createdAt: serverTimestamp() });
@@ -229,12 +231,28 @@ describe('events', () => {
 });
 
 describe('rsvps', () => {
-  test('CAN RSVP for themselves', async () => {
-    await assertSucceeds(setDoc(doc(db('oscar'), EVENT, 'rsvps', 'oscar'), { status: 'going', updatedAt: serverTimestamp() }));
+  const going = { status: 'going', updatedAt: serverTimestamp() };
+  const notGoing = { status: 'not_going', updatedAt: serverTimestamp() };
+
+  /** Writes rsvps/{rsvpId} as `uid`, plus (optionally) the event fields in the same atomic commit. */
+  function commitRsvp(uid: string, rsvpId: string, rsvp: object, eventUpdate?: object) {
+    const firestore = db(uid);
+    const batch = writeBatch(firestore);
+    batch.set(doc(firestore, EVENT, 'rsvps', rsvpId), rsvp);
+    if (eventUpdate) batch.update(doc(firestore, EVENT), eventUpdate);
+    return batch.commit();
+  }
+
+  test('CAN RSVP for themselves (with the +1 in the same commit)', async () => {
+    await assertSucceeds(commitRsvp('oscar', 'oscar', going, { attendeeCount: 3 }));
   });
 
-  test('CAN change their own RSVP to not_going', async () => {
-    await assertSucceeds(updateDoc(doc(db('alice'), EVENT, 'rsvps', 'alice'), { status: 'not_going', updatedAt: serverTimestamp() }));
+  test('CAN change their own RSVP to not_going (with the -1 in the same commit)', async () => {
+    await assertSucceeds(commitRsvp('alice', 'alice', notGoing, { attendeeCount: 1 }));
+  });
+
+  test('CAN re-save an unchanged RSVP without touching the count', async () => {
+    await assertSucceeds(commitRsvp('alice', 'alice', going));
   });
 
   test('CAN read RSVPs when signed in', async () => {
@@ -242,21 +260,44 @@ describe('rsvps', () => {
   });
 
   test('CANNOT RSVP as someone else', async () => {
-    await assertFails(setDoc(doc(db('alice'), EVENT, 'rsvps', 'oscar'), { status: 'going', updatedAt: serverTimestamp() }));
+    await assertFails(commitRsvp('alice', 'oscar', going, { attendeeCount: 3 }));
   });
 
   test("CANNOT change someone else's RSVP", async () => {
-    await assertFails(updateDoc(doc(db('alice'), EVENT, 'rsvps', 'bob'), { status: 'not_going', updatedAt: serverTimestamp() }));
+    await assertFails(commitRsvp('alice', 'bob', notGoing, { attendeeCount: 1 }));
   });
 
   test('CANNOT use an invalid status or extra fields', async () => {
-    const ref = doc(db('oscar'), EVENT, 'rsvps', 'oscar');
-    await assertFails(setDoc(ref, { status: 'maybe', updatedAt: serverTimestamp() }));
-    await assertFails(setDoc(ref, { status: 'going', updatedAt: serverTimestamp(), plusOnes: 5 }));
+    await assertFails(commitRsvp('oscar', 'oscar', { status: 'maybe', updatedAt: serverTimestamp() }));
+    await assertFails(commitRsvp('oscar', 'oscar', { ...going, plusOnes: 5 }, { attendeeCount: 3 }));
   });
 
   test('CANNOT backdate updatedAt instead of using the server time', async () => {
-    await assertFails(setDoc(doc(db('oscar'), EVENT, 'rsvps', 'oscar'), { status: 'going', updatedAt: Timestamp.fromDate(new Date('2020-01-01')) }));
+    await assertFails(commitRsvp('oscar', 'oscar', { status: 'going', updatedAt: Timestamp.fromDate(new Date('2020-01-01')) }, { attendeeCount: 3 }));
+  });
+
+  test('CANNOT RSVP going without the matching +1 on attendeeCount', async () => {
+    await assertFails(commitRsvp('oscar', 'oscar', going));
+  });
+
+  test('CANNOT cancel without the matching -1 on attendeeCount', async () => {
+    await assertFails(commitRsvp('alice', 'alice', notGoing));
+  });
+
+  test('CANNOT change attendeeCount without an RSVP change', async () => {
+    await assertFails(updateDoc(doc(db('alice'), EVENT), { attendeeCount: 3 }));
+    await assertFails(updateDoc(doc(db('oscar'), EVENT), { attendeeCount: 3 }));
+  });
+
+  test('CANNOT move attendeeCount by more than one, or the wrong way', async () => {
+    await assertFails(commitRsvp('oscar', 'oscar', going, { attendeeCount: 4 }));
+    await assertFails(commitRsvp('oscar', 'oscar', going, { attendeeCount: 1 }));
+    await assertFails(commitRsvp('alice', 'alice', notGoing, { attendeeCount: 3 }));
+  });
+
+  test('CANNOT change other event fields alongside the counter', async () => {
+    await assertFails(commitRsvp('oscar', 'oscar', going, { attendeeCount: 3, title: 'Hijacked' }));
+    await assertFails(commitRsvp('oscar', 'oscar', going, { attendeeCount: 3, commentCount: 50 }));
   });
 
   test('CANNOT RSVP to an event that does not exist', async () => {
@@ -268,7 +309,7 @@ describe('rsvps', () => {
   });
 
   test('CANNOT RSVP when signed out', async () => {
-    await assertFails(setDoc(doc(db(), EVENT, 'rsvps', 'alice'), { status: 'going', updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(), EVENT, 'rsvps', 'oscar'), going));
   });
 });
 

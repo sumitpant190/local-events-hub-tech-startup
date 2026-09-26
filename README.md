@@ -174,8 +174,8 @@ Everything is denied unless listed here. Roles come from `users/{uid}.role`, rea
 | Path | Read | Create | Update | Delete |
 |---|---|---|---|---|
 | `users/{uid}` | signed in | own uid only, `role: "attendee"`, own login email | own `name`/`avatarUrl` only (never `role` or `email`); admins may also change `role` | nobody |
-| `events/{id}` | signed in | organizer/admin; `organizerId` = self (admins: anyone); counters start at 0 | owner organizer or admin; can't change `organizerId` (admins can) or the counters | owner organizer or admin |
-| `events/{id}/rsvps/{uid}` | signed in | own uid only; `status` `going`/`not_going`; `updatedAt: serverTimestamp()` | same as create | nobody (cancel = `not_going`) |
+| `events/{id}` | signed in | organizer/admin; `organizerId` = self (admins: anyone); counters start at 0 | owner organizer or admin; can't change `organizerId` (admins can) or the counters. **Plus** any signed-in user may change `attendeeCount` alone, by exactly the ±1 their own RSVP makes in the same commit | owner organizer or admin |
+| `events/{id}/rsvps/{uid}` | signed in | own uid only; `status` `going`/`not_going`; `updatedAt: serverTimestamp()`; committed together with the matching `attendeeCount` change | same as create | nobody (cancel = `not_going`) |
 | `events/{id}/comments/{cid}` | signed in | `userId` = self; non-blank `text` under 500 characters; `createdAt: serverTimestamp()` | nobody (comments are immutable) | author or admin |
 
 The frontend must follow these:
@@ -184,6 +184,29 @@ The frontend must follow these:
 - **Document shapes:** send exactly the schema fields. Extra fields are rejected.
 
 `npm run test:emulator` covers every row, allowed and denied.
+
+### RSVP (client-side transaction)
+
+Use the reference implementation in `Backend/src/services/rsvpService.ts`:
+
+```ts
+import { toggleRsvp } from './rsvpService';
+
+const { status, attendeeCount } = await toggleRsvp(db, eventId, auth.currentUser!.uid);
+```
+
+Inside one `runTransaction`, it:
+1. reads the event and the caller's `rsvps/{uid}`;
+2. flips `going` ↔ `not_going` (a missing RSVP counts as not going);
+3. writes the RSVP (`updatedAt: serverTimestamp()`) and `attendeeCount: increment(±1)` atomically.
+
+**Why a transaction, even without a server:** every phone writes to the same `attendeeCount` field. With a naive read-then-write, two people who tap RSVP at the same moment both read `12`, both write `13`, and one RSVP disappears from the count forever. Nothing on a server can serialise them for us.
+- **What the transaction does:** it makes Firestore check at commit time that nothing it read has changed. If another RSVP got in first, it retries on fresh data.
+- **Why the RSVP and counter go in one commit:** a crash or lost connection between the two writes can't leave the RSVP saved but the count unchanged.
+- **Why `increment()`:** it's applied by the server to the value it holds at commit, so a count computed from a read that has since gone out of date is never written.
+- **What the rules add:** the counter may only move by exactly the ±1 your own RSVP makes in the same commit, checked against the stored value. A buggy or tampered client that writes `count + 1` from a stale read, or bumps the count without RSVPing, gets `permission-denied` instead of corrupting the number.
+
+In the UI, disable the RSVP button while a toggle is in flight, and show the error if one is thrown (e.g. `permission-denied` if the same account toggled from two devices at the same instant; tapping again works).
 
 ### Promoting a user to organizer or admin
 

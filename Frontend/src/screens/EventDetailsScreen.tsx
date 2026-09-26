@@ -1,51 +1,183 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect } from 'react';
-import { StyleSheet, Text } from 'react-native';
-import AppButton from '../components/AppButton';
-import ScreenContainer from '../components/ScreenContainer';
+import { MotiText } from 'moti';
+import { useEffect, useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AnimatedMessage from '../components/AnimatedMessage';
+import AttendeePreview from '../components/AttendeePreview';
+import BackButton from '../components/BackButton';
+import CapacityBar from '../components/CapacityBar';
+import CategoryBadge from '../components/CategoryBadge';
+import EmptyState from '../components/EmptyState';
+import EventHero from '../components/EventHero';
+import FadeInUp from '../components/FadeInUp';
+import InfoRow from '../components/InfoRow';
+import OrganizerCard from '../components/OrganizerCard';
+import RsvpButton from '../components/RsvpButton';
 import type { EventsStackParamList } from '../navigation/types';
-import { getEventComments } from '../services/mockApi';
+import { findUserById, getAttendeePreview } from '../services/mockApi';
+import { useAuthStore } from '../store/authStore';
 import { useEventsStore } from '../store/eventsStore';
-import { useThemeColors } from '../theme/colors';
-import { spacing } from '../theme/spacing';
+import { useThemeColors, withAlpha } from '../theme/colors';
+import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import { formatEventDate, formatEventTime } from '../utils/date';
+import { formatEventRange } from '../utils/date';
+import { isEventFull } from '../utils/rsvp';
 
 type Props = NativeStackScreenProps<EventsStackParamList, 'EventDetails'>;
 
 export default function EventDetailsScreen({ navigation, route }: Props) {
-  const { eventId, title } = route.params;
+  const { eventId } = route.params;
   const colors = useThemeColors();
-  const event = useEventsStore((state) => state.selectedEvent);
+  const insets = useSafeAreaInsets();
+  // Fall back to the list copy so the first frame (before selectEvent runs) never flashes "not found".
+  const event = useEventsStore((state) =>
+    state.selectedEvent?.id === eventId
+      ? state.selectedEvent
+      : (state.events.find((item) => item.id === eventId) ?? null),
+  );
+  const isGoing = useEventsStore((state) => state.rsvpEventIds.includes(eventId));
+  const rsvpError = useEventsStore((state) => state.rsvpError);
   const selectEvent = useEventsStore((state) => state.selectEvent);
   const clearSelectedEvent = useEventsStore((state) => state.clearSelectedEvent);
+  const toggleRsvp = useEventsStore((state) => state.toggleRsvp);
+  const currentUser = useAuthStore((state) => state.currentUser);
+
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((scrollEvent) => {
+    scrollY.value = scrollEvent.contentOffset.y;
+  });
 
   useEffect(() => {
     selectEvent(eventId);
     return clearSelectedEvent;
   }, [eventId, selectEvent, clearSelectedEvent]);
 
-  const commentCount = getEventComments(eventId).length;
-  const meta = event
-    ? [
-        `${formatEventDate(event.startsAt)} · ${formatEventTime(event.startsAt)}`,
-        `${event.location.venue}, ${event.location.address}`,
-        `${event.attendeeCount}/${event.capacity} going · ${commentCount} comments`,
-      ]
-    : [];
+  const organizerId = event?.organizerId;
+  const organizer = useMemo(() => (organizerId ? findUserById(organizerId) : undefined), [organizerId]);
+  const faces = useMemo(() => getAttendeePreview(eventId, currentUser?.id), [eventId, currentUser?.id]);
+
+  if (!event) {
+    return (
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Event not found"
+          message="It may have been removed or is no longer available."
+          actionLabel="Back to events"
+          onAction={navigation.goBack}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const spotsLeft = Math.max(event.capacity - event.attendeeCount, 0);
 
   return (
-    <ScreenContainer title={event?.title ?? title} subtitle={event?.description}>
-      {meta.map((line) => (
-        <Text key={line} style={[typography.label, styles.meta, { color: colors.textSecondary }]}>
-          {line}
-        </Text>
-      ))}
-      <AppButton label="Back to events" variant="ghost" onPress={() => navigation.goBack()} />
-    </ScreenContainer>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
+        <EventHero category={event.category} scrollY={scrollY} />
+
+        <View style={[styles.sheet, { backgroundColor: colors.background }]}>
+          <FadeInUp index={0}>
+            <CategoryBadge category={event.category} />
+            <Text style={[typography.h1, styles.title, { color: colors.textPrimary }]}>{event.title}</Text>
+          </FadeInUp>
+
+          <FadeInUp index={1} style={styles.section}>
+            <InfoRow icon="calendar-outline" title={formatEventRange(event.startsAt, event.endsAt)} />
+            <InfoRow icon="location-outline" title={event.location.venue} subtitle={event.location.address} />
+            <InfoRow icon="people-outline" title={`${event.attendeeCount} attending`} subtitle={`Capacity ${event.capacity}`} />
+            <CapacityBar attendeeCount={event.attendeeCount} capacity={event.capacity} />
+          </FadeInUp>
+
+          <FadeInUp index={2} style={styles.section}>
+            <AttendeePreview
+              attendeeCount={event.attendeeCount}
+              isGoing={isGoing}
+              currentUser={currentUser}
+              faces={faces}
+            />
+          </FadeInUp>
+
+          {organizer ? (
+            <FadeInUp index={3} style={styles.section}>
+              <OrganizerCard organizer={organizer} />
+            </FadeInUp>
+          ) : null}
+
+          <FadeInUp index={4} style={styles.section}>
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>About</Text>
+            <Text style={[typography.body, styles.description, { color: colors.textSecondary }]}>
+              {event.description}
+            </Text>
+            <View style={styles.tags}>
+              {event.tags.map((tag) => (
+                <View key={tag} style={[styles.tag, { backgroundColor: withAlpha(colors.primary, 0.12) }]}>
+                  <Text style={[typography.caption, { color: colors.primary }]}>#{tag}</Text>
+                </View>
+              ))}
+            </View>
+          </FadeInUp>
+        </View>
+      </Animated.ScrollView>
+
+      {/* Fixed above the scrolling hero so it never parallaxes away. */}
+      <View style={[styles.back, { top: insets.top + spacing.sm }]}>
+        <BackButton onPress={navigation.goBack} />
+      </View>
+
+      <View style={[styles.bar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <AnimatedMessage message={rsvpError} variant="banner" />
+        <View style={styles.barRow}>
+          <View style={styles.barText}>
+            <MotiText
+              key={event.attendeeCount}
+              from={{ opacity: 0, translateY: 6 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 220 }}
+              style={[typography.h3, { color: colors.textPrimary }]}
+            >
+              {event.attendeeCount} going
+            </MotiText>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>
+              {spotsLeft > 0 ? `${spotsLeft} spots left` : 'No spots left'}
+            </Text>
+          </View>
+          <RsvpButton isGoing={isGoing} isFull={isEventFull(event)} onPress={() => toggleRsvp(event.id)} />
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  meta: { marginBottom: spacing.xs },
+  root: { flex: 1 },
+  scroll: { paddingBottom: spacing.xl },
+  sheet: {
+    marginTop: -radius.xl,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.xl,
+  },
+  title: { marginTop: spacing.sm },
+  section: { marginTop: spacing.xl },
+  description: { marginTop: spacing.sm },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  tag: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
+  back: { position: 'absolute', left: spacing.lg },
+  bar: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  barText: { flex: 1 },
 });

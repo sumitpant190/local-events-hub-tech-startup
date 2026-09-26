@@ -17,9 +17,16 @@ export interface User {
   interests: EventCategory[];
 }
 
+export interface Coordinates {
+  latitude: number;
+  longitude: number;
+}
+
 export interface EventLocation {
   venue: string;
   address: string;
+  /** Optional: the map is hidden for events without coordinates. */
+  coordinates?: Coordinates;
 }
 
 export interface EventItem {

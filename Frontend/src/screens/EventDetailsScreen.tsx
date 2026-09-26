@@ -12,6 +12,7 @@ import CategoryBadge from '../components/CategoryBadge';
 import CommentsSection from '../components/CommentsSection';
 import EmptyState from '../components/EmptyState';
 import EventHero from '../components/EventHero';
+import EventMap from '../components/EventMap';
 import FadeInUp from '../components/FadeInUp';
 import InfoRow from '../components/InfoRow';
 import OrganizerCard from '../components/OrganizerCard';
@@ -97,6 +98,9 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
           <FadeInUp index={1} style={styles.section}>
             <InfoRow icon="calendar-outline" title={formatEventRange(event.startsAt, event.endsAt)} />
             <InfoRow icon="location-outline" title={event.location.venue} subtitle={event.location.address} />
+            {event.location.coordinates ? (
+              <EventMap coordinates={event.location.coordinates} venue={event.location.venue} />
+            ) : null}
             <InfoRow icon="people-outline" title={`${event.attendeeCount} attending`} subtitle={`Capacity ${event.capacity}`} />
             <CapacityBar attendeeCount={event.attendeeCount} capacity={event.capacity} />
           </FadeInUp>

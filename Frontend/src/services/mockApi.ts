@@ -4,6 +4,7 @@ import { ApiError, getAuthToken } from './api';
 import { mockComments } from './mockData/comments';
 import { mockEvents } from './mockData/events';
 import { mockUsers } from './mockData/users';
+import { VENUE_COORDINATES } from './mockData/venueCoordinates';
 import type { AuthSession, CommentWithAuthor, EventComment, EventItem, PublicUser, RsvpStatus, User } from './types';
 
 // In-memory stand-in for the backend. Each export mirrors one REST endpoint and returns the same
@@ -98,10 +99,15 @@ export async function getUser(userId: string): Promise<PublicUser> {
   return toPublicUser(account.user);
 }
 
-/** GET /events, soonest first. */
+/** GET /events, soonest first, with placeholder venue coordinates attached. */
 export async function listEvents(): Promise<EventItem[]> {
   await delay(LIST_LATENCY_MS);
-  return [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  return [...events]
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .map((event) => ({
+      ...event,
+      location: { ...event.location, coordinates: VENUE_COORDINATES[event.location.venue] },
+    }));
 }
 
 /** GET /me/rsvps: ids of events the signed-in user is going to. */

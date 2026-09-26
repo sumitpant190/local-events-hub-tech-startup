@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getErrorMessage } from '../services/api';
+import { readCachedEvents, writeCachedEvents } from '../services/eventsCache';
 import * as eventsService from '../services/eventsService';
 import * as rsvpService from '../services/rsvpService';
 import type { EventItem } from '../services/types';
@@ -10,6 +11,9 @@ interface EventsState {
   selectedEvent: EventItem | null;
   isLoading: boolean;
   error: string | null;
+  /** True when the last refresh failed and `events` are the cached copy from `cachedAt`. */
+  isOffline: boolean;
+  cachedAt: string | null;
   /** Events the signed-in user is going to. Reloaded per account; cleared on sign-out. */
   rsvpEventIds: string[];
   /** Events with an RSVP request in flight; further toggles are ignored until it settles. */
@@ -31,6 +35,8 @@ export const useEventsStore = create<EventsState>()((set, get) => ({
   selectedEvent: null,
   isLoading: false,
   error: null,
+  isOffline: false,
+  cachedAt: null,
   rsvpEventIds: [],
   pendingRsvpIds: [],
   rsvpError: null,
@@ -38,11 +44,21 @@ export const useEventsStore = create<EventsState>()((set, get) => ({
   loadEvents: async () => {
     if (get().isLoading) return;
     set({ isLoading: true, error: null });
+
+    // Cold start: show the cached list immediately while the network request runs.
+    if (get().events.length === 0) {
+      const cached = await readCachedEvents();
+      if (cached && get().events.length === 0) set({ events: cached.events, cachedAt: cached.savedAt });
+    }
+
     try {
       const events = await eventsService.listEvents();
-      set({ events, isLoading: false });
+      set({ events, isLoading: false, isOffline: false, cachedAt: null });
+      void writeCachedEvents(events);
     } catch (error) {
-      set({ isLoading: false, error: getErrorMessage(error, 'Could not load events.') });
+      const message = getErrorMessage(error, 'Could not load events.');
+      // With something on screen we degrade to offline mode; with nothing, it's a real error.
+      set(get().events.length > 0 ? { isLoading: false, isOffline: true } : { isLoading: false, error: message });
     }
   },
 

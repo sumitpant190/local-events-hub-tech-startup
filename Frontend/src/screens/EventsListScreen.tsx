@@ -1,32 +1,36 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInUp as EnterFadeUp, FadeOut, LinearTransition } from 'react-native-reanimated';
 import CategoryFilterBar from '../components/CategoryFilterBar';
 import EmptyState from '../components/EmptyState';
 import EventCard from '../components/EventCard';
 import EventCardSkeleton from '../components/EventCardSkeleton';
 import FadeInUp from '../components/FadeInUp';
+import OfflineBanner from '../components/OfflineBanner';
 import ScreenContainer from '../components/ScreenContainer';
 import SearchBar from '../components/SearchBar';
 import type { EventsStackParamList } from '../navigation/types';
 import type { EventItem } from '../services/types';
 import { useEventsStore } from '../store/eventsStore';
-import { MAX_STAGGERED_ITEMS, STAGGER_MS } from '../theme/motion';
+import { useThemeColors } from '../theme/colors';
+import { durations, MAX_STAGGERED_ITEMS, STAGGER_MS } from '../theme/motion';
 import { spacing } from '../theme/spacing';
 import { filterEvents, type CategoryFilter } from '../utils/filterEvents';
 
 type Props = NativeStackScreenProps<EventsStackParamList, 'EventsList'>;
 
 const SKELETON_COUNT = 3;
-const EXIT_MS = 150;
 const SPRING_DAMPING = 18;
 
 export default function EventsListScreen({ navigation }: Props) {
   const events = useEventsStore((state) => state.events);
   const isLoading = useEventsStore((state) => state.isLoading);
   const error = useEventsStore((state) => state.error);
+  const isOffline = useEventsStore((state) => state.isOffline);
+  const cachedAt = useEventsStore((state) => state.cachedAt);
   const loadEvents = useEventsStore((state) => state.loadEvents);
+  const colors = useThemeColors();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('All');
 
@@ -61,6 +65,8 @@ export default function EventsListScreen({ navigation }: Props) {
         <CategoryFilterBar selected={category} onSelect={setCategory} />
       </FadeInUp>
 
+      {isOffline ? <OfflineBanner savedAt={cachedAt} onRetry={loadEvents} /> : null}
+
       {isFirstLoad ? (
         <View>
           {Array.from({ length: SKELETON_COUNT }, (_, index) => (
@@ -86,7 +92,7 @@ export default function EventsListScreen({ navigation }: Props) {
               entering={EnterFadeUp.delay(index < MAX_STAGGERED_ITEMS ? index * STAGGER_MS : 0)
                 .springify()
                 .damping(SPRING_DAMPING)}
-              exiting={FadeOut.duration(EXIT_MS)}
+              exiting={FadeOut.duration(durations.fast)}
             >
               <EventCard event={item} onPress={openEvent} />
             </Animated.View>
@@ -99,6 +105,15 @@ export default function EventsListScreen({ navigation }: Props) {
               message="Try a different search or category."
               actionLabel="Clear filters"
               onAction={resetFilters}
+            />
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={isLoading && events.length > 0}
+              onRefresh={loadEvents}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+              progressBackgroundColor={colors.surface}
             />
           }
           keyboardShouldPersistTaps="handled"

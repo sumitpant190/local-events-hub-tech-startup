@@ -219,3 +219,36 @@
 - RSVP rows open EventDetails inside the Events tab with `initial: false`, so back returns to the events list, not Profile.
 - The notification switches are UI only (local state). They reset when the Settings screen unmounts, for example after logout.
 - Profile validation was checked with a one-off Node assert script covering valid input, an allowed empty headline, blank and too-long names, and headline length measured after trimming.
+
+## Phase 9 — API layer scaffolding
+**Date:** 2026-09-26
+**Summary:** Added the API layer. An Axios instance takes its base URL from `EXPO_PUBLIC_API_URL`, attaches the JWT and handles 401s. Per-resource services return the exact shapes the real backend will return, and a `USE_MOCK_DATA` flag switches them between an in-memory mock backend and the real API. Stores and screens now go only through the services, so switching needs no component changes. RSVPs are now per account: they reload on login and clear on logout.
+**Files added/changed:**
+- Frontend/src/services/config.ts — USE_MOCK_DATA (from EXPO_PUBLIC_USE_MOCK_DATA, default true), API_URL (from EXPO_PUBLIC_API_URL), request timeout; fails fast if real mode has no URL
+- Frontend/src/services/api.ts — Axios instance, Bearer-token request interceptor, 401 response interceptor (sign-out handler, skipped for login/signup), ApiError, envelope-unwrapping request()
+- Frontend/src/services/types.ts — API contract types: ApiEnvelope, AuthSession, PublicUser, RsvpStatus, CommentWithAuthor
+- Frontend/src/services/authService.ts — login, signup, demoCredentials (mock mode only)
+- Frontend/src/services/usersService.ts — updateMe, getUser
+- Frontend/src/services/eventsService.ts — listEvents
+- Frontend/src/services/rsvpService.ts — listMyRsvpEventIds, setRsvp, listAttendees
+- Frontend/src/services/commentsService.ts — listComments, createComment
+- Frontend/src/services/mockApi.ts — rewritten as an in-memory mock backend: one function per endpoint, fake per-user tokens, per-account RSVPs, server-side sanitizing and capacity checks
+- Frontend/src/store/authStore.ts — async login/signup/updateProfile via services; sets/clears the token; registers the 401 sign-out handler; resets and reloads RSVP state per session
+- Frontend/src/store/eventsStore.ts — loads via services; new loadMyRsvps and resetUserState; toggleRsvp adopts the server's count and ignores responses after sign-out
+- Frontend/src/store/commentsStore.ts — loads/posts via services; comments carry their author; per-event load errors
+- Frontend/src/utils/useEventPeople.ts — organizer and attendee faces for EventDetails via services
+- Frontend/src/screens/{LoginScreen,SignupScreen}.tsx, Frontend/src/components/EditProfileForm.tsx — await async store actions, ignore double taps; Login demo hint only in mock mode
+- Frontend/src/screens/EventDetailsScreen.tsx, Frontend/src/components/CommentsSection.tsx — no more direct mockApi imports; comment load error shown
+- Frontend/src/components/{AttendeePreview,OrganizerCard}.tsx — accept PublicUser
+- Frontend/.env.example, Frontend/.gitignore — documented env vars; .env and .env.* now ignored
+- README.md — how to switch to the real API and the full endpoint contract
+**Commit:** `feat(api): add axios client with jwt and 401 interceptors`, `feat(api): add per-resource services backed by a mock backend`, `refactor(store): route stores and screens through api services`, `docs: log phase 9 and document api contract`, `docs: add phase 9 entry to git history`
+**Notes/decisions:**
+- Every response uses the `{ success, data, error }` envelope. `request()` unwraps it and throws ApiError, whose message is safe to show users. Network, timeout and 401 errors get friendly defaults.
+- A 401 from any authenticated call clears the token and signs the user out through a handler that authStore registers, so api.ts never imports a store. 401s from /auth/login and /auth/signup are treated as "wrong credentials" and don't trigger sign-out.
+- The JWT is kept in memory only, so a restart means logging in again. Persisting it (e.g. expo-secure-store) is left for the backend/auth phase.
+- Comments come back with their author embedded (`CommentWithAuthor`), and the server takes the author from the token. The client no longer looks users up or sends an author id.
+- Closes the security audit lead `eventsStore.rsvpEventIds/cross-account-state-retention`: RSVPs are keyed per account in the (mock) backend, and the store resets on login/logout and reloads via `GET /me/rsvps`. In-flight RSVP responses that arrive after sign-out are dropped.
+- The mock backend re-validates like a server would: capacity (409), duplicate email (409), comment sanitising (422), session required (401).
+- Commit `ccf3ce5 fix(app): render navigator in a plain view so cold start isn't stuck at opacity 0` landed just before this phase. It fixes the blank screen on cold start in Expo Go and silences moti's SafeAreaView deprecation warning.
+- Verified with typecheck and an Android bundle export. A device run-through of this phase was not possible because the emulator had been closed.

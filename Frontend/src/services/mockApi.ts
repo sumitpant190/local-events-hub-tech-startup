@@ -24,6 +24,27 @@ export function findUserById(id: string): User | undefined {
   return accounts.find((account) => account.user.id === id)?.user;
 }
 
+const RSVP_LATENCY_MS = 400;
+
+/** Mock RSVP write. Resolves on success; a real API would reject on failure. */
+export async function updateRsvp(_eventId: string, _isGoing: boolean): Promise<void> {
+  await delay(RSVP_LATENCY_MS);
+}
+
+/**
+ * A few users to show as "also going": people who commented on the event first,
+ * then other members. Deterministic so avatars don't reshuffle between renders.
+ */
+export function getAttendeePreview(eventId: string, excludeUserId?: string, limit = 3): User[] {
+  const commenterIds = getEventComments(eventId).map((comment) => comment.userId);
+  const orderedIds = [...new Set([...commenterIds, ...mockUsers.map((user) => user.id)])];
+  return orderedIds
+    .filter((id) => id !== excludeUserId)
+    .slice(0, limit)
+    .map((id) => findUserById(id))
+    .filter((user): user is User => user !== undefined);
+}
+
 // Mock credentials: plaintext and in memory only. The backend phase replaces this with real, hashed auth.
 export const DEMO_PASSWORD = 'startup123';
 export const DEMO_USER_EMAIL = mockUsers[0].email;

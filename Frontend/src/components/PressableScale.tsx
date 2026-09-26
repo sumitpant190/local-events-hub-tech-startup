@@ -11,7 +11,10 @@ type PressableScaleProps = {
   accessibilityState?: AccessibilityState;
   /** Scale while held; large surfaces like cards look better with a subtler value. */
   pressedScale?: number;
+  disabled?: boolean;
 };
+
+const DISABLED_OPACITY = 0.5;
 
 // Spring scale-down on press; base for every tappable card and button.
 export default function PressableScale({
@@ -21,20 +24,23 @@ export default function PressableScale({
   accessibilityLabel,
   accessibilityState,
   pressedScale = PRESSED_SCALE,
+  disabled = false,
 }: PressableScaleProps) {
   const [isPressed, setIsPressed] = useState(false);
+  const opacity = disabled ? DISABLED_OPACITY : isPressed ? 0.9 : 1;
 
   return (
     <Pressable
       onPress={onPress}
       onPressIn={() => setIsPressed(true)}
       onPressOut={() => setIsPressed(false)}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={accessibilityState}
+      accessibilityState={{ ...accessibilityState, disabled }}
     >
       <MotiView
-        animate={{ scale: isPressed ? pressedScale : 1, opacity: isPressed ? 0.9 : 1 }}
+        animate={{ scale: isPressed ? pressedScale : 1, opacity }}
         transition={springs.press}
         style={style}
       >

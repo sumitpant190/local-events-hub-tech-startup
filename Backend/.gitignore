@@ -1,0 +1,13 @@
+node_modules/
+
+# Secrets — never commit. The client-side Firebase web config is NOT a secret; a service account key IS.
+.env*
+*serviceAccountKey*.json
+service-account*.json
+
+# Firebase CLI / emulator output
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+emulator-data/

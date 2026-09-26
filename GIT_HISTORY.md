@@ -284,3 +284,32 @@
 - **Offline cache scope:** only the public events list is cached, under the key `leh:events:v1`. No token, profile or RSVP data is stored on the device, so the cache is safe across accounts. Cached data is shape-checked before use, and read/write failures fall back to the network silently because the cache is best-effort. Offline mode only shows when a refresh fails and cached events are on screen; with nothing cached, the existing "Couldn't load events" state applies.
 - **Map:** coordinates are placeholders around Market St, San Francisco, matching the made-up "12 Market Street" address. It's a lite-mode, non-interactive preview, so it's cheap inside a ScrollView, and tapping it opens `geo:` (Android) or `maps:` (iOS). A custom Google map style built from the palette themes it on Android, and iOS uses `userInterfaceStyle`. Release Android builds need a Google Maps API key in app.json; Expo Go does not.
 - **Not verified on a device:** the emulator was closed, so the light/dark look, map rendering and offline banner were checked by typecheck, Android bundle export and the contrast calculations only.
+
+---
+
+# Backend (Firebase, Spark plan)
+
+## Phase 1 — Setup
+**Date:** 2026-09-26
+**Summary:** Scaffolded the Firebase backend in `Backend/` for the free Spark plan: Firestore plus the Auth and Firestore emulators, with no Cloud Functions. Firestore starts in production mode with a single deny-all rule, and secret files are git-ignored before any backend file was committed. The README now has a Backend Setup Guide.
+**Files added/changed:**
+- Backend/.gitignore — node_modules, `.env*`, `*serviceAccountKey*.json`, `service-account*.json`, `.firebase/`, and the firebase/firestore/ui debug logs and emulator data
+- Backend/package.json, Backend/package-lock.json — firebase-tools 15.31.0 as a local dev dependency, with `emulators` and `firebase` scripts that call the CLI through node
+- Backend/firebase.json — Firestore rules/indexes plus emulators: auth 9099, firestore 8080, UI 4000, single-project mode
+- Backend/.firebaserc — default project `demo-local-events-hub`
+- Backend/firestore.rules — production mode: deny all reads and writes
+- Backend/firestore.indexes.json — empty
+- README.md — Backend Setup Guide (running the emulators, linking the real Spark project, what's secret and what isn't, manual role promotion in the Console)
+**Commit:** `chore(backend): scaffold firebase spark project with deny-all rules and emulators`
+**Verified:**
+- `npm run emulators` (firebase emulators:start) printed "All emulators ready!" with Auth on 127.0.0.1:9099, Firestore on 127.0.0.1:8080 and the UI on 127.0.0.1:4000. There were no errors.
+- An unauthenticated REST `GET .../documents/events/x` against the Firestore emulator returned `403 PERMISSION_DENIED` ("false for 'get' @ L8"), so deny-all is enforced.
+- `git status --ignored` shows the debug logs and node_modules ignored; no credential files are present or staged.
+- No rules tests were written in this phase.
+**Notes/decisions:**
+- **No new git repo:** the repository already existed at the root from the frontend work, so no `git init` was run. The backend lives in `Backend/` and is logged here, at the root as requested earlier. Running `git init` inside `Backend/` would have created a nested repository.
+- **`firebase init` written by hand:** it's interactive and needs `firebase login`, so its output (firebase.json, .firebaserc, rules, indexes) was written directly, selecting only Firestore and the Auth + Firestore emulators.
+- **Demo project ID:** `demo-local-events-hub` makes the emulators run with no login, no real project and no possibility of reaching production. The real Spark project (Firestore in production mode, Email/Password Auth) is created in the Console and linked with `firebase use --add`, as documented in the README. It could not be created from here because that requires your Google account.
+- **Secrets:** the client web config (apiKey, authDomain, projectId, …) is not a secret; it identifies the project and ships in the app. The service account key (Phase 2 seed script only) is the secret, and it's git-ignored.
+- **Blaze check:** nothing added needs Blaze. Firestore, Auth, Security Rules and the local emulators are all Spark-compatible.
+- **Data-model gap still open:** the model in the backend spec differs from the frontend's current types (date vs startsAt/endsAt, location shape, capacity/tags, headline vs role/avatarUrl, comment `text`/`userId` vs `body`/`authorId`). I'm assuming the backend spec is the source of truth until you say otherwise.

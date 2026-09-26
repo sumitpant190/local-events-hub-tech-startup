@@ -3,6 +3,7 @@
 A mobile app for discovering local events. University group project, theme: **Tech & Startup**.
 
 - `Frontend/` — React Native app (Expo managed workflow, TypeScript)
+- `Backend/` — Firebase on the free Spark plan: Firestore security rules, emulator config, seed scripts, rules tests
 - `GIT_HISTORY.md` — phase-by-phase development log
 
 ## Tech stack
@@ -80,3 +81,40 @@ Frontend/
 ```
 
 All colors, fonts and spacing must come from `src/theme/`. Don't put inline hex values in screens or components.
+
+## Backend Setup Guide
+
+The backend is Firebase on the free **Spark** plan only: Firestore, Firebase Authentication (Email/Password) and Security Rules. There are no Cloud Functions and no custom server. The app talks to Firestore directly, so `Backend/firestore.rules` is the access-control layer. Nothing here needs the Blaze plan or billing.
+
+### Prerequisites
+
+- Node.js 20 or newer
+- Java 21 or newer (the Firestore emulator runs on the JVM)
+
+### Run the emulators
+
+```bash
+cd "Tech & Startup/Backend"
+npm install
+npm run emulators
+```
+
+This starts the Auth emulator (`127.0.0.1:9099`), the Firestore emulator (`127.0.0.1:8080`) and the Emulator UI at http://127.0.0.1:4000. The default project is `demo-local-events-hub`: `demo-` projects run entirely locally, need no `firebase login`, and can't reach real Firebase services.
+
+> **Windows note:** as with the frontend, the `&` in the folder name breaks npm's `.bin` shims, so use `npm run emulators` or `npm run firebase -- <command>` rather than `npx firebase ...`.
+
+### Link the real Firebase project (Spark plan)
+
+1. In the [Firebase Console](https://console.firebase.google.com), create a project. It starts on Spark. Don't upgrade it or add billing.
+2. **Build → Firestore Database → Create database**, and choose **production mode** (deny all), not test mode.
+3. **Build → Authentication → Sign-in method**, and enable **Email/Password**.
+4. Link it locally: `npm run firebase -- login`, then `npm run firebase -- use --add` and pick the project.
+
+### Secrets: what's safe to commit
+
+- **Safe (not a secret):** the client-side Firebase config (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) from **Project Settings → Your apps**. It only identifies the project and ships inside the app. Access is enforced by `firestore.rules` and Firebase Auth, not by keeping this config hidden.
+- **Secret (never commit):** a **service account key** (`serviceAccountKey.json`). It grants full admin access and bypasses all security rules. It's used only by the local seed script, and `Backend/.gitignore` blocks `*serviceAccountKey*.json` and `.env*`.
+
+### Promoting a user to organizer or admin
+
+New users are created as `attendee`. The Spark plan has no Cloud Functions to change roles, so an organizer or admin role is set **manually in the Firebase Console**: go to **Firestore Database → `users/{userId}`**, edit the `role` field to `organizer` or `admin`, and save. Console edits go through the Admin API, so the security rules that stop users from changing their own role don't block them.

@@ -43,3 +43,31 @@ export interface EventComment {
   body: string;
   createdAt: string; // ISO-8601
 }
+
+// ---- API contract: shapes the backend returns (the mock backend returns the same) ----
+
+/** Other members as the API exposes them: no email or private fields. */
+export type PublicUser = Pick<User, 'id' | 'name' | 'headline'>;
+
+/** Comments arrive with their author embedded so the UI never looks users up itself. */
+export interface CommentWithAuthor extends EventComment {
+  author: PublicUser;
+}
+
+export interface AuthSession {
+  token: string;
+  user: User;
+}
+
+export interface RsvpStatus {
+  eventId: string;
+  isGoing: boolean;
+  attendeeCount: number;
+}
+
+/** Every backend response is wrapped in this envelope. */
+export interface ApiEnvelope<T> {
+  success: boolean;
+  data: T | null;
+  error: string | null;
+}

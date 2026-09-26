@@ -38,4 +38,15 @@ export const typography = {
   bodyStrong: { fontFamily: fonts.bodySemiBold, fontSize: 15, lineHeight: 22 },
   label: { fontFamily: fonts.bodyMedium, fontSize: 13, lineHeight: 18 },
   caption: { fontFamily: fonts.body, fontSize: 12, lineHeight: 16 },
+  /** Small uppercase labels: badges, section titles ("HOSTED BY"). Pass uppercase text. */
+  overline: { fontFamily: fonts.bodyMedium, fontSize: 12, lineHeight: 16, letterSpacing: 1.2 },
+  /** Wide-tracked brand pill text, e.g. "TECH & STARTUP". */
+  eyebrow: { fontFamily: fonts.bodyMedium, fontSize: 13, lineHeight: 18, letterSpacing: 2 },
+  tabLabel: { fontFamily: fonts.bodyMedium, fontSize: 11 },
+} satisfies Record<string, TextStyle>;
+
+// The splash renders before custom fonts load, so these use the platform font on purpose.
+export const systemTypography = {
+  splashTitle: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
+  splashEyebrow: { fontSize: 12, fontWeight: '600', letterSpacing: 3 },
 } satisfies Record<string, TextStyle>;

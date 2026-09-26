@@ -1,7 +1,25 @@
 // Shared motion tokens so every screen and control moves the same way.
 export const durations = {
+  /** Exits and tiny state flips (clear button, removed rows). */
+  fast: 150,
+  /** Colour/border changes on focus, selection and toggles. */
+  colorShift: 200,
+  /** Text that swaps value (counts, labels) fading up. */
+  textSwap: 220,
+  /** Opacity part of staggered entrances. */
+  fadeIn: 320,
   screen: 350,
-  entrance: 450,
+  /** Branded splash reveal. */
+  splash: 700,
+  /** One beat of looping indicators (splash dot). */
+  pulse: 800,
+} as const;
+
+/** Ready-made moti `transition` values for the durations above. */
+export const timings = {
+  fast: { type: 'timing', duration: durations.fast },
+  colorShift: { type: 'timing', duration: durations.colorShift },
+  textSwap: { type: 'timing', duration: durations.textSwap },
 } as const;
 
 export const springs = {

@@ -1,15 +1,15 @@
 import { create } from 'zustand';
-import { findUserByEmail } from '../services/mockApi';
+import { authenticate, registerAccount } from '../services/mockApi';
 import type { User } from '../services/types';
-import { isValidEmail, normalizeEmail } from '../utils/validation';
+import { isValidEmail, MIN_PASSWORD_LENGTH, normalizeEmail } from '../utils/validation';
+
+export type AuthResult = { ok: true } | { ok: false; error: string };
 
 interface AuthState {
   isLoggedIn: boolean;
   currentUser: User | null;
-  /** Returns false when no mock user matches the email. */
-  login: (email: string) => boolean;
-  /** Returns false when the name is blank or the email is invalid. */
-  signup: (name: string, email: string) => boolean;
+  login: (email: string, password: string) => AuthResult;
+  signup: (name: string, email: string, password: string) => AuthResult;
   logout: () => void;
 }
 
@@ -17,16 +17,19 @@ export const useAuthStore = create<AuthState>()((set) => ({
   isLoggedIn: false,
   currentUser: null,
 
-  login: (email) => {
-    const user = findUserByEmail(normalizeEmail(email));
-    if (!user) return false;
+  login: (email, password) => {
+    const user = authenticate(normalizeEmail(email), password);
+    if (!user) return { ok: false, error: 'Incorrect email or password.' };
     set({ isLoggedIn: true, currentUser: user });
-    return true;
+    return { ok: true };
   },
 
-  signup: (name, email) => {
+  signup: (name, email, password) => {
     const trimmedName = name.trim();
-    if (!trimmedName || !isValidEmail(email)) return false;
+    // Re-checked here so the store never accepts bad data, whatever the caller validated.
+    if (!trimmedName || !isValidEmail(email) || password.length < MIN_PASSWORD_LENGTH) {
+      return { ok: false, error: 'Please check your details and try again.' };
+    }
     // New users live in memory only until the backend exists.
     const user: User = {
       id: `usr-${Date.now()}`,
@@ -35,8 +38,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
       headline: 'New member',
       interests: [],
     };
+    if (!registerAccount(user, password)) {
+      return { ok: false, error: 'An account with this email already exists.' };
+    }
     set({ isLoggedIn: true, currentUser: user });
-    return true;
+    return { ok: true };
   },
 
   logout: () => set({ isLoggedIn: false, currentUser: null }),

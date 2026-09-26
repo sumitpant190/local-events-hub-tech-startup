@@ -58,6 +58,23 @@ export function validateLogin(values: LoginValues): FieldErrors<LoginValues> {
   };
 }
 
+export const MAX_HEADLINE_LENGTH = 80;
+
+export interface ProfileValues {
+  name: string;
+  headline: string;
+}
+
+export function validateProfile(values: ProfileValues): FieldErrors<ProfileValues> {
+  return {
+    name: nameError(values.name),
+    headline:
+      values.headline.trim().length > MAX_HEADLINE_LENGTH
+        ? `Headline must be under ${MAX_HEADLINE_LENGTH} characters.`
+        : undefined,
+  };
+}
+
 export function validateSignup(values: SignupValues): FieldErrors<SignupValues> {
   const confirmPassword = !values.confirmPassword
     ? 'Please confirm your password.'

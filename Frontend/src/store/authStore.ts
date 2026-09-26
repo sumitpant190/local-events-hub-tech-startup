@@ -1,7 +1,14 @@
 import { create } from 'zustand';
-import { authenticate, registerAccount } from '../services/mockApi';
+import { authenticate, registerAccount, updateAccountProfile } from '../services/mockApi';
 import type { User } from '../services/types';
-import { isValidEmail, MIN_PASSWORD_LENGTH, normalizeEmail } from '../utils/validation';
+import {
+  hasErrors,
+  isValidEmail,
+  MIN_PASSWORD_LENGTH,
+  normalizeEmail,
+  validateProfile,
+  type ProfileValues,
+} from '../utils/validation';
 
 export type AuthResult = { ok: true } | { ok: false; error: string };
 
@@ -10,10 +17,11 @@ interface AuthState {
   currentUser: User | null;
   login: (email: string, password: string) => AuthResult;
   signup: (name: string, email: string, password: string) => AuthResult;
+  updateProfile: (values: ProfileValues) => AuthResult;
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
+export const useAuthStore = create<AuthState>()((set, get) => ({
   isLoggedIn: false,
   currentUser: null,
 
@@ -42,6 +50,16 @@ export const useAuthStore = create<AuthState>()((set) => ({
       return { ok: false, error: 'An account with this email already exists.' };
     }
     set({ isLoggedIn: true, currentUser: user });
+    return { ok: true };
+  },
+
+  updateProfile: (values) => {
+    const { currentUser } = get();
+    if (!currentUser) return { ok: false, error: 'You need to be logged in.' };
+    if (hasErrors(validateProfile(values))) return { ok: false, error: 'Please fix the highlighted fields.' };
+    const updated: User = { ...currentUser, name: values.name.trim(), headline: values.headline.trim() };
+    updateAccountProfile(updated);
+    set({ currentUser: updated });
     return { ok: true };
   },
 

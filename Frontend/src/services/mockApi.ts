@@ -76,6 +76,11 @@ export function authenticate(email: string, password: string): User | undefined 
   return account && account.password === password ? account.user : undefined;
 }
 
+/** Replaces the stored profile so lookups (comment authors, organizers) show the new name. */
+export function updateAccountProfile(user: User): void {
+  accounts = accounts.map((entry) => (entry.user.id === user.id ? { ...entry, user } : entry));
+}
+
 /** Returns false when the email is already registered. */
 export function registerAccount(user: User, password: string): boolean {
   if (accounts.some((entry) => entry.user.email === user.email)) return false;

@@ -1,18 +1,117 @@
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { MotiView } from 'moti';
+import { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInUp as EnterFadeUp, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '../components/AppButton';
-import ScreenContainer from '../components/ScreenContainer';
+import Avatar from '../components/Avatar';
+import BottomSheetModal from '../components/BottomSheetModal';
+import EditProfileForm from '../components/EditProfileForm';
+import EmptyState from '../components/EmptyState';
+import EventListItem from '../components/EventListItem';
+import FadeInUp from '../components/FadeInUp';
 import type { MainTabParamList } from '../navigation/types';
+import type { EventItem } from '../services/types';
 import { useAuthStore } from '../store/authStore';
+import { useEventsStore } from '../store/eventsStore';
+import { useThemeColors, withAlpha } from '../theme/colors';
+import { springs, STAGGER_MS } from '../theme/motion';
+import { radius, spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
 
+const AVATAR_SIZE = 88;
+const SPRING_DAMPING = 18;
+
 export default function ProfileScreen({ navigation }: Props) {
+  const colors = useThemeColors();
   const currentUser = useAuthStore((state) => state.currentUser);
+  const events = useEventsStore((state) => state.events);
+  const rsvpEventIds = useEventsStore((state) => state.rsvpEventIds);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // events is already sorted by start date, so this keeps RSVPs in chronological order.
+  const myEvents = useMemo(() => events.filter((event) => rsvpEventIds.includes(event.id)), [events, rsvpEventIds]);
+
+  // initial: false keeps EventsList underneath, so back from details lands on the list.
+  const openEvent = (event: EventItem) =>
+    navigation.navigate('EventsTab', {
+      screen: 'EventDetails',
+      params: { eventId: event.id, title: event.title },
+      initial: false,
+    });
+
+  // Tabs only render when logged in; this guards the brief frame during logout.
+  if (!currentUser) return null;
 
   return (
-    <ScreenContainer title={currentUser?.name ?? 'Profile'} subtitle={currentUser?.headline}>
-      <AppButton label="Browse events" onPress={() => navigation.navigate('EventsTab', { screen: 'EventsList' })} />
-      <AppButton label="Settings" variant="ghost" onPress={() => navigation.navigate('Settings')} />
-    </ScreenContainer>
+    <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <FadeInUp index={0} style={styles.header}>
+          <MotiView
+            from={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={springs.entrance}
+            style={[styles.avatarRing, { borderColor: withAlpha(colors.primary, 0.4) }]}
+          >
+            <Avatar name={currentUser.name} size={AVATAR_SIZE} isHighlighted />
+          </MotiView>
+          <Text style={[typography.h1, styles.centered, { color: colors.textPrimary }]}>{currentUser.name}</Text>
+          <Text style={[typography.body, { color: colors.textSecondary }]}>{currentUser.email}</Text>
+          {currentUser.headline ? (
+            <Text style={[typography.label, styles.headline, { color: colors.accent }]}>{currentUser.headline}</Text>
+          ) : null}
+          <AppButton label="Edit profile" variant="ghost" onPress={() => setIsEditing(true)} />
+        </FadeInUp>
+
+        <FadeInUp index={1} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>My RSVPs</Text>
+            <View style={[styles.count, { backgroundColor: withAlpha(colors.primary, 0.14) }]}>
+              <Text style={[typography.label, { color: colors.primary }]}>{myEvents.length}</Text>
+            </View>
+          </View>
+
+          {myEvents.length === 0 ? (
+            <EmptyState
+              icon="calendar-clear-outline"
+              title="No RSVPs yet"
+              message="Events you RSVP to will show up here."
+              actionLabel="Browse events"
+              onAction={() => navigation.navigate('EventsTab', { screen: 'EventsList' })}
+            />
+          ) : (
+            myEvents.map((event, index) => (
+              <Animated.View
+                key={event.id}
+                entering={EnterFadeUp.delay(index * STAGGER_MS).springify().damping(SPRING_DAMPING)}
+                exiting={FadeOut.duration(150)}
+                layout={LinearTransition.springify().damping(SPRING_DAMPING)}
+              >
+                <EventListItem event={event} onPress={openEvent} />
+              </Animated.View>
+            ))
+          )}
+        </FadeInUp>
+      </ScrollView>
+
+      <BottomSheetModal visible={isEditing} onClose={() => setIsEditing(false)} title="Edit profile">
+        <EditProfileForm user={currentUser} onDone={() => setIsEditing(false)} />
+      </BottomSheetModal>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  scroll: { padding: spacing.xl, paddingBottom: spacing.xxxl },
+  header: { alignItems: 'center' },
+  avatarRing: { padding: spacing.xs, borderRadius: radius.pill, borderWidth: 2, marginBottom: spacing.lg },
+  centered: { textAlign: 'center' },
+  headline: { marginTop: spacing.xs },
+  section: { marginTop: spacing.xxl },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  count: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs, borderRadius: radius.pill },
+});

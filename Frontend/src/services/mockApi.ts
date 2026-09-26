@@ -4,7 +4,8 @@ import { mockUsers } from './mockData/users';
 import type { EventComment, EventItem, User } from './types';
 
 // Stand-in for the real API; swap these bodies for Axios calls once the backend exists.
-const MOCK_LATENCY_MS = 600;
+// Long enough for the skeleton shimmer to register, short enough not to annoy.
+const MOCK_LATENCY_MS = 1000;
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 

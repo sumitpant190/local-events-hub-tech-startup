@@ -1,10 +1,13 @@
-export type EventCategory =
-  | 'Hackathon'
-  | 'Networking'
-  | 'Workshop'
-  | 'Demo Day'
-  | 'Panel'
-  | 'Pitch Night';
+export const EVENT_CATEGORIES = [
+  'Hackathon',
+  'Networking',
+  'Workshop',
+  'Demo Day',
+  'Panel',
+  'Pitch Night',
+] as const;
+
+export type EventCategory = (typeof EVENT_CATEGORIES)[number];
 
 export interface User {
   id: string;

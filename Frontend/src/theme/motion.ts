@@ -11,3 +11,6 @@ export const springs = {
 
 export const STAGGER_MS = 70;
 export const PRESSED_SCALE = 0.96;
+export const CARD_PRESSED_SCALE = 0.975;
+// Only the first screenful staggers; later items (scrolled into view) appear without delay.
+export const MAX_STAGGERED_ITEMS = 6;

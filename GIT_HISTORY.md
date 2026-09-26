@@ -107,3 +107,32 @@
 - Errors animate to their measured height rather than using moti's `AnimatePresence`. That comes from the nested framer-motion copy, which bundles the duplicate React from Phase 1, and could crash with "invalid hook call".
 - The keyboard "next" key moves between fields, "go" submits, and the email fields use email keyboards with autofill hints.
 - The validation rules were checked with a one-off Node assert script covering required fields, email format, whitespace handling, the 8-character minimum, password match and name length.
+
+## Phase 5 — Events list
+**Date:** 2026-09-26
+**Summary:** Rebuilt EventsList as a "Discover" feed of designed event cards pulled from eventsStore. Each card has a category-icon cover, a date tile, an accent category badge, the title, date/time, venue and attendee count. A search bar filters by title and a horizontal row of chips filters by category, and cards stagger in, spring on press, and fade and slide into place when the filters change. Shimmering skeleton cards cover the simulated load, and there are empty-results and load-error states.
+**Files added/changed:**
+- Frontend/src/components/EventCard.tsx — event card with cover placeholder, date tile, badge and meta rows
+- Frontend/src/components/CategoryBadge.tsx — accent-colored category pill
+- Frontend/src/components/SkeletonBlock.tsx — shimmer block (looping soft highlight band)
+- Frontend/src/components/EventCardSkeleton.tsx — skeleton matching EventCard's layout
+- Frontend/src/components/EmptyState.tsx — icon, title, message and optional action, used for no results and load errors
+- Frontend/src/components/SearchBar.tsx — search input with animated focus border and clear button
+- Frontend/src/components/CategoryChip.tsx — filter chip with animated selected state
+- Frontend/src/components/CategoryFilterBar.tsx — horizontal chip row: All plus six categories
+- Frontend/src/components/PressableScale.tsx — added pressedScale and accessibilityState props
+- Frontend/src/theme/motion.ts — added CARD_PRESSED_SCALE and MAX_STAGGERED_ITEMS
+- Frontend/src/services/types.ts — EVENT_CATEGORIES array; EventCategory now derived from it
+- Frontend/src/services/mockApi.ts — mock latency raised to 1000ms so the skeleton is visible
+- Frontend/src/utils/filterEvents.ts — pure title + category filter
+- Frontend/src/utils/categoryIcons.ts — Ionicons icon per category
+- Frontend/src/utils/date.ts — getDateParts() for the month/day tile
+- Frontend/src/screens/EventsListScreen.tsx — search, chips, skeletons, animated list, empty and error states
+**Commit:** `feat(ui): add event card, category badge and shimmer skeleton components`, `feat(events): add search and category filter chips to events list`, `docs: log phase 5 in git history`
+**Notes/decisions:**
+- The list uses Reanimated's `Animated.FlatList`. Cards enter with a springy FadeInUp and leave with FadeOut, and the remaining cards spring into their new positions (`itemLayoutAnimation`) when search or chips change. Only the first 6 cards stagger, so cards scrolled into view later don't wait.
+- The card press uses a subtler 0.975 scale than buttons (0.96).
+- The shimmer is a three-step translucent band sliding across each block. This fakes a gradient without adding expo-linear-gradient.
+- Search matches titles only, is case-insensitive and ignores surrounding whitespace, and it combines with the category filter. Filter state is local to the screen because nothing else needs it.
+- Cover images are placeholders (a category icon on a tinted cover), since the mock events have no image URLs.
+- filterEvents was checked with a one-off Node assert script covering no filter, whitespace query, category only, case-insensitive title, query plus category, and title-only matching.

@@ -24,6 +24,20 @@ export function findUserById(id: string): User | undefined {
   return accounts.find((account) => account.user.id === id)?.user;
 }
 
+const COMMENT_LATENCY_MS = 350;
+
+/** Mock comment write. Expects an already-sanitized body; a real server re-validates it. */
+export async function postComment(eventId: string, userId: string, body: string): Promise<EventComment> {
+  await delay(COMMENT_LATENCY_MS);
+  return {
+    id: `cmt-${Date.now()}`,
+    eventId,
+    userId,
+    body,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 const RSVP_LATENCY_MS = 400;
 
 /** Mock RSVP write. Resolves on success; a real API would reject on failure. */

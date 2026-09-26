@@ -313,3 +313,41 @@
 - **Secrets:** the client web config (apiKey, authDomain, projectId, …) is not a secret; it identifies the project and ships in the app. The service account key (Phase 2 seed script only) is the secret, and it's git-ignored.
 - **Blaze check:** nothing added needs Blaze. Firestore, Auth, Security Rules and the local emulators are all Spark-compatible.
 - **Data-model gap still open:** the model in the backend spec differs from the frontend's current types (date vs startsAt/endsAt, location shape, capacity/tags, headline vs role/avatarUrl, comment `text`/`userId` vs `body`/`authorId`). I'm assuming the backend spec is the source of truth until you say otherwise.
+
+## Phase 2 — Data modeling & seed data
+**Date:** 2026-09-26
+**Summary:** Added TypeScript interfaces for the four Firestore document types, exactly per the schema, plus an emulator-only firebase-admin seed script. The script creates 4 users (Auth accounts and `users` docs), 12 Tech & Startup events reused from the frontend mock data, 28 RSVPs and 24 comments. `npm run seed:emulator` refuses any target that isn't the local emulators.
+**Files added/changed:**
+- Backend/src/types.ts — `User`, `Event`, `Rsvp` and `Comment` interfaces, the role/category/status unions, and a structural `FirestoreTimestamp` that both the Admin and client SDKs satisfy
+- Backend/scripts/emulatorGuard.ts — `resolveEmulatorTarget()`: requires a `demo-` project, local emulator hosts and no `GOOGLE_APPLICATION_CREDENTIALS`
+- Backend/scripts/seedData.ts — the frontend's events and comments mapped onto the backend schema, with explicit RSVPs per event
+- Backend/scripts/seed.ts — wipes the emulators through emulator-only REST endpoints, creates Auth users, and writes every doc in one batch, with counters derived from the seeded subcollections
+- Backend/tests/emulatorGuard.test.ts — 5 `node:test` cases for the guard (defaults, loopback hosts, non-demo project, credentials set, remote/lookalike hosts)
+- Backend/tsconfig.json — strict, noEmit, erasable-syntax-only settings so Node runs the `.ts` files directly
+- Backend/package.json, package-lock.json — `"type": "module"`, engines `node >=22.18`, scripts `seed:emulator`, `test` and `typecheck`; firebase-admin 14.5.0, typescript 7.0.2 and @types/node as dev dependencies
+- README.md — Node 22.18+ prerequisite, a "Seed the emulators" section, and a backend scripts table
+**Commit:** `feat(seed): add firestore types and emulator-only seed script`
+**Verified:**
+- `npm run typecheck`: clean.
+- `npm test`: 5/5 pass.
+- **Refusals:** `GCLOUD_PROJECT=local-events-hub npm run seed:emulator` aborted ("not a demo- project"), and `FIRESTORE_EMULATOR_HOST=firestore.googleapis.com:443` aborted ("not a local emulator"). With the emulators stopped, it aborted with "Can't reach the emulator… npm run emulators". All three exited with code 1.
+- **Seeding:** `npm run emulators` reported "All emulators ready!", then `npm run seed:emulator` seeded 4 users, 12 events, 28 RSVPs and 24 comments. A second run also succeeded, which proves the wipe and re-seed is repeatable.
+- **Read-back from the emulator REST API:**
+  - Field sets are exactly `users {avatarUrl, email, name, role}`, `events {attendeeCount, category, commentCount, date, description, imageUrl, location, organizerId, title}`, `rsvps {status, updatedAt}` and `comments {createdAt, text, userId}`.
+  - Every event's `attendeeCount` equals its "going" RSVPs and `commentCount` equals its comments.
+  - The Auth emulator holds 4 accounts.
+**Notes/decisions:**
+- **Schema over frontend shape:** where the schema and the frontend mock differ, the schema wins, and no extra fields were added.
+  - `date` is the frontend's `startsAt` as a Timestamp.
+  - `location` is one string, "Venue, Address".
+  - `endsAt`, `capacity`, `tags`, `headline` and `interests` aren't stored.
+  - Event ids, titles, descriptions, categories and comment ids/text match the frontend.
+- **4 users, not 6:** the spec asked for 3–4. Kept Maya (usr-01) and Daniel (usr-04) as organizers, and Priya (usr-05) and Liam (usr-06) as attendees. Events and comments by the frontend's other users (Arjun, Sofia) were reassigned to these four, and the organizer-voiced replies went to the event's organizer.
+- **Counters are real:** `attendeeCount`/`commentCount` are derived from the seeded docs (0–3 going per event), not the frontend's display numbers (e.g. 142). The Phase 3+ rules will enforce ±1 updates, which only works from a consistent starting point.
+- **No service account key needed:** against the emulator, firebase-admin authenticates with nothing, so the seed deliberately refuses when `GOOGLE_APPLICATION_CREDENTIALS` is set. A key would only be needed to write to a real project, which this script never does.
+- **Demo password:** `startup123` is committed on purpose. It's the same emulator-only demo password the frontend mock already uses, and it's not a real credential.
+- **No build step:** Node ≥22.18 strips TypeScript types natively, so there's no ts-node/tsx dependency. `tsc` is used only for type checking.
+- **Placeholder images:** `imageUrl` uses picsum.photos and `avatarUrl` uses DiceBear initials.
+- **Blaze check:** the seed runs locally against the emulators. Nothing is deployed, and nothing needs Blaze.
+- **npm audit:** 5 moderate advisories in transitive dependencies of the dev tooling (`@opentelemetry/core`, `uuid`, via firebase-admin/firebase-tools). They're dev-only, not shipped, and `audit fix --force` would downgrade major versions, so they're left as is.
+- **Windows gotcha:** stopping the backgrounded `npm run emulators` doesn't kill its Java/Node children, so leftover emulators kept ports 8080/9099 busy. They had to be stopped by PID. Stop emulators with Ctrl+C in their own terminal.

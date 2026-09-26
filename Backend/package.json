@@ -1,12 +1,22 @@
 {
   "name": "local-events-hub-backend",
   "private": true,
+  "type": "module",
   "description": "Firebase (Spark plan) backend: Firestore security rules, emulator config, seed scripts and rules tests.",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "firebase": "node node_modules/firebase-tools/lib/bin/firebase.js",
-    "emulators": "node node_modules/firebase-tools/lib/bin/firebase.js emulators:start"
+    "emulators": "node node_modules/firebase-tools/lib/bin/firebase.js emulators:start",
+    "seed:emulator": "node scripts/seed.ts",
+    "test": "node --test tests/emulatorGuard.test.ts",
+    "typecheck": "node node_modules/typescript/bin/tsc"
   },
   "devDependencies": {
-    "firebase-tools": "^15.31.0"
+    "@types/node": "^26.6.3",
+    "firebase-admin": "^14.5.0",
+    "firebase-tools": "^15.31.0",
+    "typescript": "^7.0.2"
   }
 }

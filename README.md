@@ -88,7 +88,7 @@ The backend is Firebase on the free **Spark** plan only: Firestore, Firebase Aut
 
 ### Prerequisites
 
-- Node.js 20 or newer
+- Node.js 22.18 or newer (the scripts are TypeScript run directly by Node, with no build step)
 - Java 21 or newer (the Firestore emulator runs on the JVM)
 
 ### Run the emulators
@@ -102,6 +102,30 @@ npm run emulators
 This starts the Auth emulator (`127.0.0.1:9099`), the Firestore emulator (`127.0.0.1:8080`) and the Emulator UI at http://127.0.0.1:4000. The default project is `demo-local-events-hub`: `demo-` projects run entirely locally, need no `firebase login`, and can't reach real Firebase services.
 
 > **Windows note:** as with the frontend, the `&` in the folder name breaks npm's `.bin` shims, so use `npm run emulators` or `npm run firebase -- <command>` rather than `npx firebase ...`.
+
+### Seed the emulators
+
+With the emulators running, in a second terminal:
+
+```bash
+npm run seed:emulator
+```
+
+This wipes the emulators, then creates 4 users (Auth accounts and `users` docs), 12 events, plus RSVPs and comments. Every seeded account signs in with the password `startup123` (for example `maya@loopdesk.io`). Emulator data is in memory, so re-run the seed after each emulator restart.
+
+The script only ever targets the emulators. It refuses to run if:
+- the project isn't a `demo-` project;
+- `FIRESTORE_EMULATOR_HOST` or `FIREBASE_AUTH_EMULATOR_HOST` points anywhere other than this machine;
+- `GOOGLE_APPLICATION_CREDENTIALS` is set.
+
+It needs no service account key.
+
+| Script | What it does |
+|---|---|
+| `npm run emulators` | Start the Auth + Firestore emulators and the Emulator UI |
+| `npm run seed:emulator` | Wipe and re-seed the emulators |
+| `npm test` | Run the backend tests |
+| `npm run typecheck` | TypeScript check |
 
 ### Link the real Firebase project (Spark plan)
 

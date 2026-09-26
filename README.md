@@ -167,6 +167,24 @@ The reference implementation is `Backend/src/signUp.ts`. Use it as-is in the app
 
 `Backend/tests/signup.emulator.test.ts` checks each of these (`npm run test:emulator`).
 
+### Access rules (what `firestore.rules` allows)
+
+Everything is denied unless listed here. Roles come from `users/{uid}.role`, read live by the rules; there are no custom claims on Spark.
+
+| Path | Read | Create | Update | Delete |
+|---|---|---|---|---|
+| `users/{uid}` | signed in | own uid only, `role: "attendee"`, own login email | own `name`/`avatarUrl` only (never `role` or `email`); admins may also change `role` | nobody |
+| `events/{id}` | signed in | organizer/admin; `organizerId` = self (admins: anyone); counters start at 0 | owner organizer or admin; can't change `organizerId` (admins can) or the counters | owner organizer or admin |
+| `events/{id}/rsvps/{uid}` | signed in | own uid only; `status` `going`/`not_going`; `updatedAt: serverTimestamp()` | same as create | nobody (cancel = `not_going`) |
+| `events/{id}/comments/{cid}` | signed in | `userId` = self; non-blank `text` under 500 characters; `createdAt: serverTimestamp()` | nobody (comments are immutable) | author or admin |
+
+The frontend must follow these:
+- **Timestamps:** write `updatedAt` and `createdAt` with `serverTimestamp()`. Client clock values are rejected.
+- **Cancelling an RSVP:** set `status: "not_going"`; don't delete the doc.
+- **Document shapes:** send exactly the schema fields. Extra fields are rejected.
+
+`npm run test:emulator` covers every row, allowed and denied.
+
 ### Promoting a user to organizer or admin
 
 Everyone signs up as `attendee`. The Spark plan has no admin Cloud Function, so for testing and demos, promote a user by hand:

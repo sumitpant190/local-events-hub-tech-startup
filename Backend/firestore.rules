@@ -1,9 +1,11 @@
 rules_version = '2';
 
-// Production mode: deny everything by default. Each collection gets its own explicit grant;
-// nothing is ever opened with a blanket or time-limited "test mode" rule.
+// Deny by default; every access below is an explicit grant. There is no server and no custom claims
+// (Spark plan), so these rules are the whole access-control layer and roles come from users/{uid}.role.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------- helpers ----------
 
     function isSignedIn() {
       return request.auth != null;
@@ -13,25 +15,135 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Signup profile: exactly the schema keys, the account's own email, and role forced to attendee.
-    // Promotion to organizer/admin happens only in the Firebase Console (Admin API, bypasses rules).
-    function isValidNewUser(data) {
-      return data.keys().hasOnly(['name', 'email', 'role', 'avatarUrl'])
-        && data.keys().hasAll(['name', 'email', 'role', 'avatarUrl'])
-        && data.name is string
-        && data.name.trim().size() > 0
-        && data.name.size() <= 80
-        && data.email == request.auth.token.email
-        && data.role == 'attendee'
+    // The caller's role, read live from their own profile (one document read). Only an admin can ever
+    // write a role, so this is trustworthy; a missing profile makes the get() fail and the rule deny.
+    function callerRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerRole() == 'admin';
+    }
+
+    function isOrganizerOrAdmin() {
+      return isSignedIn() && callerRole() in ['organizer', 'admin'];
+    }
+
+    function hasExactly(data, keys) {
+      return data.keys().hasOnly(keys) && data.keys().hasAll(keys);
+    }
+
+    function isNonBlankString(value, maxSize) {
+      return value is string && value.trim().size() > 0 && value.size() <= maxSize;
+    }
+
+    function eventExists(eventId) {
+      return exists(/databases/$(database)/documents/events/$(eventId));
+    }
+
+    // ---------- users ----------
+
+    function isValidProfile(data) {
+      return hasExactly(data, ['name', 'email', 'role', 'avatarUrl'])
+        && isNonBlankString(data.name, 80)
+        && data.email is string
+        && data.role in ['attendee', 'organizer', 'admin']
         && data.avatarUrl is string
         && data.avatarUrl.size() <= 2048;
     }
 
     match /users/{userId} {
-      // Own profile only; listing users (emails) stays denied.
-      allow get: if isSelf(userId);
-      // Create only, so an existing profile (and a promoted role) can never be overwritten by signup.
-      allow create: if isSelf(userId) && isValidNewUser(request.resource.data);
+      allow read: if isSignedIn();
+
+      // Signup: own uid only, own login email, and always attendee (no self-created organizers/admins).
+      allow create: if isSelf(userId)
+        && isValidProfile(request.resource.data)
+        && request.resource.data.role == 'attendee'
+        && request.resource.data.email == request.auth.token.email;
+
+      // Self-edit may never touch role (no self-promotion) and may only change name/avatarUrl.
+      // Admins may change role (in-app promotion). Email is fixed for everyone: it mirrors the Auth account.
+      allow update: if isValidProfile(request.resource.data)
+        && request.resource.data.email == resource.data.email
+        && (
+          (isSelf(userId)
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatarUrl']))
+          || isAdmin()
+        );
+    }
+
+    // ---------- events ----------
+
+    function isValidEvent(data) {
+      return hasExactly(data, ['title', 'description', 'date', 'location', 'category', 'organizerId',
+                               'attendeeCount', 'commentCount', 'imageUrl'])
+        && isNonBlankString(data.title, 120)
+        && isNonBlankString(data.description, 5000)
+        && data.date is timestamp
+        && isNonBlankString(data.location, 200)
+        && data.category in ['Hackathon', 'Networking', 'Pitch Night', 'Workshop', 'Demo Day', 'Panel']
+        && data.organizerId is string
+        && data.attendeeCount is int && data.attendeeCount >= 0
+        && data.commentCount is int && data.commentCount >= 0
+        && data.imageUrl is string
+        && data.imageUrl.size() <= 2048;
+    }
+
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+
+      // Organizers create events as themselves (admins for anyone), with counters starting at zero.
+      allow create: if isOrganizerOrAdmin()
+        && isValidEvent(request.resource.data)
+        && (request.resource.data.organizerId == request.auth.uid || isAdmin())
+        && request.resource.data.attendeeCount == 0
+        && request.resource.data.commentCount == 0;
+
+      // Owner (or admin) edits. Ownership can't be handed off except by an admin, and the counters are
+      // never editable here: they only move with RSVPs and comments.
+      allow update: if isOrganizerOrAdmin()
+        && (resource.data.organizerId == request.auth.uid || isAdmin())
+        && isValidEvent(request.resource.data)
+        && (request.resource.data.organizerId == resource.data.organizerId || isAdmin())
+        && request.resource.data.attendeeCount == resource.data.attendeeCount
+        && request.resource.data.commentCount == resource.data.commentCount;
+
+      allow delete: if isOrganizerOrAdmin()
+        && (resource.data.organizerId == request.auth.uid || isAdmin());
+
+      // ---------- events/{eventId}/rsvps/{userId} ----------
+
+      match /rsvps/{userId} {
+        allow read: if isSignedIn();
+
+        // Only your own RSVP (doc id == your uid), on an existing event, with a server timestamp.
+        // No delete: cancelling is status "not_going", so the RSVP always pairs with the attendee count.
+        allow create, update: if isSelf(userId)
+          && eventExists(eventId)
+          && hasExactly(request.resource.data, ['status', 'updatedAt'])
+          && request.resource.data.status in ['going', 'not_going']
+          && request.resource.data.updatedAt == request.time;
+      }
+
+      // ---------- events/{eventId}/comments/{commentId} ----------
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+
+        // Post as yourself only: non-blank text under 500 characters, server timestamp.
+        allow create: if isSignedIn()
+          && eventExists(eventId)
+          && hasExactly(request.resource.data, ['userId', 'text', 'createdAt'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.trim().size() > 0
+          && request.resource.data.text.size() < 500
+          && request.resource.data.createdAt == request.time;
+
+        // Comments are immutable: no update rule. Only the author or an admin can delete.
+        allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      }
     }
 
     match /{document=**} {

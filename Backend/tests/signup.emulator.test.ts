@@ -75,16 +75,12 @@ test('the profile email must be the account email and the name must be real', as
   await assert.rejects(setDoc(ref, { name: 'x'.repeat(81), email: user.email, role: 'attendee', avatarUrl: '' }), isPermissionDenied);
 });
 
-test('users cannot create or read profiles for other uids', async () => {
-  const victim = newClient();
-  const victimCredential = await signUp(victim.auth, victim.db, { name: 'Victim', email: uniqueEmail(), password: PASSWORD });
-
+test('users cannot create a profile for another uid', async () => {
   const attacker = newClient();
   const { user } = await createUserWithEmailAndPassword(attacker.auth, uniqueEmail(), PASSWORD);
   const profile = { name: 'Attacker', email: user.email, role: 'attendee', avatarUrl: '' };
 
   await assert.rejects(setDoc(doc(attacker.db, 'users', 'someone-else'), profile), isPermissionDenied);
-  await assert.rejects(getDoc(doc(attacker.db, 'users', victimCredential.user.uid)), isPermissionDenied);
 });
 
 test('an existing profile (and its role) cannot be overwritten by signing up again', async () => {

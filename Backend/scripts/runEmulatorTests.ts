@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { resolveEmulatorTarget } from './emulatorGuard.ts';
 
 const target = resolveEmulatorTarget(process.env);
-const result = spawnSync(process.execPath, ['--test', ...process.argv.slice(2)], { stdio: 'inherit' });
+// One file at a time: the files share one emulator and the rules tests wipe Firestore between cases.
+const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...process.argv.slice(2)], { stdio: 'inherit' });
 
 if (process.platform === 'win32') {
   await fetch(`http://${target.firestoreHost}/shutdown`, { method: 'POST' }).catch(() => undefined);

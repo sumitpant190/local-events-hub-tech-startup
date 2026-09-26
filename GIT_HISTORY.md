@@ -376,3 +376,70 @@
 - **Windows bug found and fixed:** `firebase emulators:exec` exits without stopping the Firestore emulator's Java process on Windows, so the next run fails with "port taken". The test runner now POSTs to the emulator's `/shutdown` endpoint when the tests finish.
 - **Email normalisation:** the profile uses `credential.user.email`, which Firebase lowercases, so it always matches `request.auth.token.email`. The test signs up with an uppercase email to check this.
 - **Blaze check:** everything is client SDK plus Security Rules. There's no Auth trigger or Cloud Function, and nothing needs Blaze.
+
+## Phase 4 — Security rules
+**Date:** 2026-09-26
+**Summary:** Replaced the signup-only rules with the full deny-by-default rule set for users, events, RSVPs and comments. Roles are read live from the caller's own user doc through `get()` (`callerRole()` and `isAdmin()`), because the Spark plan has no custom claims. Added 55 `@firebase/rules-unit-testing` tests (positive and negative) that run against the Firestore emulator, led by the role-spoofing cases.
+**Files added/changed:**
+- Backend/firestore.rules — full rules:
+  - **Helpers:** `isSignedIn`, `isSelf`, `callerRole` (`get()` of `users/$(request.auth.uid)`), `isAdmin`, `isOrganizerOrAdmin`, `hasExactly`, `isNonBlankString`, `eventExists`.
+  - **users:** read when signed in; create as your own uid, attendee only, with your own email; update your own `name`/`avatarUrl` with role unchanged, or any field as an admin; email immutable; no delete.
+  - **events:** read when signed in; create as organizer or admin under your own `organizerId`, with counters at 0 and a validated shape; update/delete by the owner or an admin; `organizerId` and the counters frozen on edit.
+  - **rsvps:** read when signed in; create/update only your own uid's doc, with status going/not_going, a server `updatedAt`, and an existing event; no delete.
+  - **comments:** read when signed in; create as yourself with non-blank text under 500 characters, a server `createdAt` and an existing event; no update; delete by the author or an admin.
+  - Catch-all deny.
+- Backend/tests/rules.emulator.test.ts — 55 rules tests; fixtures are reset before every test
+- Backend/tests/signup.emulator.test.ts — dropped the "can't read other profiles" assertion, since profiles are now readable by signed-in users per the spec
+- Backend/scripts/runEmulatorTests.ts — runs test files one at a time (they share one emulator)
+- Backend/package.json, package-lock.json — `@firebase/rules-unit-testing` 5.0.2 (dev); `test:emulator` runs both emulator test files
+- README.md — "Access rules" table and the frontend requirements (serverTimestamp, cancel an RSVP with not_going, exact fields)
+**Commit:** `feat(rules): add role-based firestore rules with self-promotion guards and rules tests`
+**Verified:**
+- `npm run typecheck`: clean.
+- `npm test`: 5/5 pass.
+- `npm run test:emulator`: **62/62 pass** (55 rules tests plus 7 signup tests) and exited 0, with no emulator left running afterwards.
+- **Mutation check:** I temporarily deleted the "role unchanged / only name+avatarUrl" lines from the self-update rule. 5 tests then failed: the 4 update-based role-spoofing tests and the Phase 3 "re-signup can't overwrite a role" test. The rules were restored byte-identical (`cmp`) and the suite passes again, so these tests do catch the regression they exist for.
+- `npm run emulators`: "All emulators ready!" with no errors; `npm run seed:emulator` still seeds 4 users, 12 events, 28 RSVPs and 24 comments.
+**Negative cases tested:**
+- **Role spoofing:**
+  - sign up as organizer; sign up as admin;
+  - `updateDoc({role: 'organizer'})` on your own doc; full `setDoc` overwrite of your own doc with `role: 'admin'`;
+  - a role change hidden alongside a legitimate name change;
+  - an organizer promoting themselves to admin; an organizer promoting someone else.
+- **Users:**
+  - create a doc for another uid; sign up with an email that isn't your login email;
+  - edit someone else's profile; add an extra field (`isAdmin: true`); change your own email;
+  - delete a profile; read profiles when signed out.
+- **Events:**
+  - read when signed out; an attendee creating an event; a demoted organizer creating an event;
+  - creating under another `organizerId`; creating with an inflated `attendeeCount`; creating with an unknown category or an extra field;
+  - editing or deleting another organizer's event; handing your event's `organizerId` to someone else;
+  - editing your own event's `attendeeCount`/`commentCount`; an attendee editing or deleting an event.
+- **RSVPs:**
+  - RSVP as someone else; change someone else's RSVP;
+  - an invalid status (`maybe`) or an extra field; a backdated `updatedAt`;
+  - RSVP to a nonexistent event; delete an RSVP; RSVP when signed out.
+- **Comments:**
+  - post as someone else;
+  - empty, whitespace-only, exactly 500-character or non-string text;
+  - a backdated `createdAt` or an extra field;
+  - edit someone else's comment; edit your own comment;
+  - delete someone else's comment (as an attendee, and as the event's organizer);
+  - comment on a nonexistent event; comment when signed out.
+- **Other:** unknown collections are denied even for an admin.
+**Notes/decisions:**
+- **Tighter than the spec, on purpose (every change is a restriction, never a loosening):**
+  - Self-update may change only `name`/`avatarUrl`, not just "role unchanged". That blocks smuggled fields and email changes.
+  - Email is immutable for everyone.
+  - Admin updates must keep a valid profile shape.
+  - Events are shape-validated. `organizerId` must be the creator (admins excepted) and can't be reassigned on edit. Counters start at 0 and can't be edited.
+  - RSVP/comment docs are shape-validated and must use server timestamps and an existing event.
+  - **RSVP delete is denied, though the spec said "write":** cancelling is `status: "not_going"`, so the doc always pairs with `attendeeCount`.
+- **Added beyond the spec:** comment `read` for signed-in users. The spec listed none, and the app has to show comments.
+- **"Under 500 characters"** is taken literally as `size() < 500`: 499 passes, 500 fails, and both are tested.
+- **PII trade-off, following the spec:** `users` read is "signed in", so any signed-in user can list every user's email. If that matters for the demo, the fix is a separate public-profile doc (name/avatar only) with emails readable only by their owner.
+- **Counters:** `attendeeCount`/`commentCount` can't be changed by any client right now, not even the ±1 that should go with an RSVP or comment. That's the next piece of work: a client transaction plus a rule that allows exactly ±1, paired with the RSVP/comment write through `getAfter()`. Until then the seeded counts stay accurate, but new RSVPs and comments won't update them.
+- **Deleting an event** leaves its RSVP/comment subdocs orphaned. Firestore has no cascade and there's no Cloud Function on Spark. They're unreachable from the app, so this is noted, not fixed.
+- **Cost:** each role check is one `get()`, which counts as one document read against the free daily quota. Within one request, repeated `get()`s of the same doc are counted once.
+- **Not deployed:** the rules are only verified on the emulator. Deploy with `npm run firebase -- deploy --only firestore:rules` (targets `events-hub-techstartup`).
+- **Blaze check:** rules only; nothing needs Blaze.

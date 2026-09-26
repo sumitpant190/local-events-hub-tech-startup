@@ -165,3 +165,25 @@
 - RSVPs live in eventsStore for the session and aren't tied to a user, so they survive logout. Per-user RSVPs will come with the backend.
 - The RSVP label switches color instantly while the background animates, because moti's MotiText typing doesn't allow animating `color`.
 - The RSVP helpers were checked with a one-off Node assert script covering increment to capacity, clamping at capacity and zero, no input mutation, and rollback restoring the count.
+
+## Phase 7 — Comments UI
+**Date:** 2026-09-26
+**Summary:** Added a comments section to EventDetails. Each comment shows an avatar, name ("You" for your own), relative timestamp and text, newest first, under a header with an animated count. A growing text input with a character counter and a spring-press send button posts through a new commentsStore. New comments slide and fade in at the top while the rest spring down, and all input is sanitized on the client first.
+**Files added/changed:**
+- Frontend/src/utils/sanitize.ts — sanitizeComment(): normalizes line endings, strips `<script>` blocks and other HTML tags, removes control characters, collapses blank lines, trims, caps at 280 characters
+- Frontend/src/store/commentsStore.ts — commentsByEvent (newest first), postingEventId, loadComments(), addComment() returning { ok } or { ok: false, error }
+- Frontend/src/services/mockApi.ts — postComment() mock write (350ms)
+- Frontend/src/utils/date.ts — formatRelativeTime() ("just now", "5m ago", "3h ago", "2d ago", then "Sep 20")
+- Frontend/src/components/CommentItem.tsx — avatar, name, timestamp and text row
+- Frontend/src/components/CommentInput.tsx — multiline input with focus animation, character counter, animated error, send button with a spinner while posting
+- Frontend/src/components/CommentsSection.tsx — header with animated count, input, and animated newest-first list
+- Frontend/src/screens/EventDetailsScreen.tsx — comments section added; KeyboardAvoidingView and keyboardShouldPersistTaps for typing
+**Commit:** `feat(comments): add comments store with sanitized mock posting`, `feat(comments): add animated comments section to event details`, `docs: log phase 7 in git history`
+**Notes/decisions:**
+- Sanitization is a client-side placeholder. React Native's `<Text>` doesn't render HTML, so this isn't what prevents XSS. The backend must still validate and escape comments server-side. Plain `<` and `>` in normal text (for example "2 < 3") are kept.
+- The store sanitizes again inside addComment, so any caller goes through the same rules. Empty-after-sanitizing comments are rejected with "Comment can't be empty.", and a second post while one is in flight is refused.
+- The TextInput's `maxLength` (280) matches the sanitizer's cap. The counter turns red with 20 characters left.
+- Comments are stored newest first, so a new post appears next to the input. Reanimated `FadeInDown` handles the slide and fade, and `LinearTransition` springs the existing comments down. The initial list staggers in, capped at 6 items.
+- Posting isn't optimistic. The send button shows a spinner for the 350ms mock write, then the comment animates in. This avoids temporary IDs and reconciliation for a single-author action.
+- Comments live in memory for the session. The mock API doesn't keep them after a reload.
+- The sanitizer and relative-time formatter were checked with a one-off Node assert script covering trim, script and tag stripping (case, attributes, multiline), control characters, blank-line collapsing, keeping plain `<` and `>`, the length cap with trailing trim, and each time bucket.

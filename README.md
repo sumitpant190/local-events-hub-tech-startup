@@ -59,6 +59,10 @@ API contract the backend must follow (every response is `{ success, data, error 
 
 A `401` from any authenticated call signs the user out; `401` from login/signup is shown as a normal error.
 
+`EventItem.location.coordinates` (`{ latitude, longitude }`) is optional; EventDetails shows a map card only when it is present. Maps work in Expo Go as-is; a standalone Android release build additionally needs a Google Maps API key in `app.json` (`android.config.googleMaps.apiKey`).
+
+The events list is cached on the device (AsyncStorage, public event data only). If a refresh fails, the app keeps showing the cached list with an "offline" banner and a Retry button; pull down to refresh.
+
 ### Project structure
 
 ```

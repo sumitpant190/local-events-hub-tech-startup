@@ -252,3 +252,35 @@
 - The mock backend re-validates like a server would: capacity (409), duplicate email (409), comment sanitising (422), session required (401).
 - Commit `ccf3ce5 fix(app): render navigator in a plain view so cold start isn't stuck at opacity 0` landed just before this phase. It fixes the blank screen on cold start in Expo Go and silences moti's SafeAreaView deprecation warning.
 - Verified with typecheck and an Android bundle export. A device run-through of this phase was not possible because the emulator had been closed.
+
+## Phase 10 — Polish & bonus
+**Date:** 2026-09-26
+**Summary:** Audited every screen and component against the theme and moved all remaining styling drift onto tokens: 13 ad-hoc tint strengths, 8 hard-coded durations and scattered letter-spacing and font-size overrides. Light mode was redesigned as its own palette rather than a swap, with semantic color roles tuned per scheme and verified with WCAG contrast checks. Bonuses: the events list is cached in AsyncStorage for offline use, and EventDetails shows a themed react-native-maps card for each venue.
+**Files added/changed:**
+- Frontend/src/theme/colors.ts — semantic roles per scheme: accentText, errorText, primaryTint, accentTint, errorTint, primarySurface, primaryBorder, accentBorder, errorBorder, glowPrimary, glowAccent, surfaceGlass, scrim
+- Frontend/src/theme/typography.ts — overline, eyebrow and tabLabel text styles; systemTypography for the pre-font splash
+- Frontend/src/theme/motion.ts — named durations (fast, colorShift, textSwap, fadeIn, splash, pulse) and ready-made `timings`
+- Frontend/src/components/{AnimatedMessage,AppButton,AttendeePreview,AuthScreenLayout,Avatar,BackButton,BackgroundGlow,BottomSheetModal,CategoryBadge,CategoryChip,CommentInput,CommentsSection,EmptyState,EventCard,EventHero,EventListItem,FadeInUp,FormField,InfoRow,OrganizerCard,SearchBar,SettingsGroup,SplashLoader,SpringSwitch}.tsx — ad-hoc withAlpha tints, inline durations and type overrides replaced with tokens
+- Frontend/src/navigation/MainTabs.tsx, Frontend/src/screens/{EventDetailsScreen,ProfileScreen,EventsListScreen}.tsx — same token migration
+- Frontend/src/services/eventsCache.ts — AsyncStorage read/write of `{ savedAt, events }` with a shape check on read
+- Frontend/src/store/eventsStore.ts — shows the cache instantly, refreshes from the API, caches each success, and falls back to offline mode (isOffline, cachedAt) when a refresh fails
+- Frontend/src/components/OfflineBanner.tsx — animated "You're offline · showing events saved 2h ago" banner with Retry
+- Frontend/src/screens/EventsListScreen.tsx — offline banner and themed pull-to-refresh
+- Frontend/src/components/EventMap.tsx — static map card with a palette-derived map style that opens the device's maps app on tap
+- Frontend/src/services/types.ts — optional `EventLocation.coordinates`
+- Frontend/src/services/mockData/venueCoordinates.ts, Frontend/src/services/mockApi.ts — placeholder coordinates attached per venue
+- Frontend/src/screens/EventDetailsScreen.tsx — map card under the venue row
+- Frontend/package.json, package-lock.json — @react-native-async-storage/async-storage 2.2.0, react-native-maps 1.27.2 (Expo also re-pinned react-native-worklets to 0.10.1 for SDK 57)
+- README.md — coordinates field, maps API key note, offline behaviour
+**Commit:** `refactor(theme): add semantic color roles and a tuned light palette`, `refactor(ui): replace inline tints, durations and type overrides with theme tokens`, `chore(deps): add async-storage and react-native-maps`, `feat(events): cache events list in asyncstorage for offline mode`, `feat(events): add venue map to event details with placeholder coordinates`, `docs: log phase 10 and document offline mode and maps`
+**Notes/decisions:**
+- **Light mode is designed, not inverted.** The spec's background/text swap and identical primary/accent fills are kept, but the supporting roles differ per scheme:
+  - lighter tints and glows on white, since strong ones look muddy;
+  - stronger borders on tinted fills;
+  - a dark scrim behind sheets instead of a light wash;
+  - darker text-only variants of accent (#0E7490) and error (#C53030).
+- **Contrast check (WCAG):** light-mode accent badge text went from 1.67:1 to 4.88:1 and error text from 2.78:1 to 5.47:1. Every text role now passes AA in both schemes, with dark-mode values unchanged in spirit.
+- **Remaining drift, on purpose:** the only `withAlpha` left in components is SkeletonBlock's shimmer gradient steps, from a named `BAND_ALPHAS` constant. SplashLoader uses `systemTypography` because it renders before custom fonts load.
+- **Offline cache scope:** only the public events list is cached, under the key `leh:events:v1`. No token, profile or RSVP data is stored on the device, so the cache is safe across accounts. Cached data is shape-checked before use, and read/write failures fall back to the network silently because the cache is best-effort. Offline mode only shows when a refresh fails and cached events are on screen; with nothing cached, the existing "Couldn't load events" state applies.
+- **Map:** coordinates are placeholders around Market St, San Francisco, matching the made-up "12 Market Street" address. It's a lite-mode, non-interactive preview, so it's cheap inside a ScrollView, and tapping it opens `geo:` (Android) or `maps:` (iOS). A custom Google map style built from the palette themes it on Android, and iOS uses `userInterfaceStyle`. Release Android builds need a Google Maps API key in app.json; Expo Go does not.
+- **Not verified on a device:** the emulator was closed, so the light/dark look, map rendering and offline banner were checked by typecheck, Android bundle export and the contrast calculations only.

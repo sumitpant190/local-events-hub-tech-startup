@@ -3,7 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { MotiView } from 'moti';
 import { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from '../navigation/RootNavigator';
 import { useThemeColors } from '../theme/colors';
@@ -35,14 +35,9 @@ export default function AppShell() {
     <SafeAreaProvider style={{ backgroundColor: colors.background }}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {isReady ? (
-        <MotiView
-          style={styles.fill}
-          from={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ type: 'timing', duration: 400 }}
-        >
+        <View style={styles.fill}>
           <RootNavigator />
-        </MotiView>
+        </View>
       ) : (
         <MotiView style={styles.fill} onLayout={() => SplashScreen.hide()}>
           <SplashLoader />

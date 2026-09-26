@@ -1,7 +1,7 @@
 import { MotiText } from 'moti';
 import { StyleSheet, View } from 'react-native';
 import Animated, { LinearTransition, ZoomIn, ZoomOut } from 'react-native-reanimated';
-import type { User } from '../services/types';
+import type { PublicUser } from '../services/types';
 import { useThemeColors } from '../theme/colors';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -10,9 +10,9 @@ import Avatar from './Avatar';
 type AttendeePreviewProps = {
   attendeeCount: number;
   isGoing: boolean;
-  currentUser: User | null;
+  currentUser: PublicUser | null;
   /** Other attendees to show as faces (current user excluded). */
-  faces: User[];
+  faces: PublicUser[];
 };
 
 const MAX_FACES = 3;

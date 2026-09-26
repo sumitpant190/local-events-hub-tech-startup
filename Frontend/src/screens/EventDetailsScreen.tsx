@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MotiText } from 'moti';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +17,6 @@ import InfoRow from '../components/InfoRow';
 import OrganizerCard from '../components/OrganizerCard';
 import RsvpButton from '../components/RsvpButton';
 import type { EventsStackParamList } from '../navigation/types';
-import { findUserById, getAttendeePreview } from '../services/mockApi';
 import { useAuthStore } from '../store/authStore';
 import { useEventsStore } from '../store/eventsStore';
 import { useThemeColors, withAlpha } from '../theme/colors';
@@ -25,6 +24,7 @@ import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { formatEventRange } from '../utils/date';
 import { isEventFull } from '../utils/rsvp';
+import { useEventPeople } from '../utils/useEventPeople';
 
 type Props = NativeStackScreenProps<EventsStackParamList, 'EventDetails'>;
 
@@ -55,9 +55,7 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
     return clearSelectedEvent;
   }, [eventId, selectEvent, clearSelectedEvent]);
 
-  const organizerId = event?.organizerId;
-  const organizer = useMemo(() => (organizerId ? findUserById(organizerId) : undefined), [organizerId]);
-  const faces = useMemo(() => getAttendeePreview(eventId, currentUser?.id), [eventId, currentUser?.id]);
+  const { organizer, attendees: faces } = useEventPeople(eventId, event?.organizerId, currentUser?.id);
 
   if (!event) {
     return (

@@ -1,12 +1,12 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { User } from '../services/types';
+import type { PublicUser } from '../services/types';
 import { useThemeColors } from '../theme/colors';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import Avatar from './Avatar';
 
 type OrganizerCardProps = {
-  organizer: User;
+  organizer: PublicUser;
 };
 
 const AVATAR_SIZE = 48;

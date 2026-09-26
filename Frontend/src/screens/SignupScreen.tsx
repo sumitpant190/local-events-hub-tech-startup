@@ -20,6 +20,7 @@ export default function SignupScreen({ navigation }: Props) {
   const [values, setValues] = useState<SignupValues>(INITIAL_VALUES);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const isSubmitting = useRef(false);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
@@ -32,10 +33,12 @@ export default function SignupScreen({ navigation }: Props) {
     setFormError(null);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setHasSubmitted(true);
-    if (hasErrors(validateSignup(values))) return;
-    const result = signup(values.name, values.email, values.password);
+    if (isSubmitting.current || hasErrors(validateSignup(values))) return;
+    isSubmitting.current = true;
+    const result = await signup(values.name, values.email, values.password);
+    isSubmitting.current = false;
     if (!result.ok) setFormError(result.error);
   };
 

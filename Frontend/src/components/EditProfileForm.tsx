@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { User } from '../services/types';
 import { useAuthStore } from '../store/authStore';
@@ -21,6 +21,7 @@ export default function EditProfileForm({ user, onDone }: EditProfileFormProps) 
   const [values, setValues] = useState<ProfileValues>({ name: user.name, headline: user.headline });
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const isSaving = useRef(false);
 
   const errors = hasSubmitted ? validateProfile(values) : {};
 
@@ -29,10 +30,12 @@ export default function EditProfileForm({ user, onDone }: EditProfileFormProps) 
     setFormError(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setHasSubmitted(true);
-    if (hasErrors(validateProfile(values))) return;
-    const result = updateProfile(values);
+    if (isSaving.current || hasErrors(validateProfile(values))) return;
+    isSaving.current = true;
+    const result = await updateProfile(values);
+    isSaving.current = false;
     if (result.ok) {
       onDone();
     } else {

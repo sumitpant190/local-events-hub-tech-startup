@@ -38,6 +38,27 @@ Then scan the QR code with Expo Go (Android) or the Camera app (iOS). Or press `
 
 > **Windows note:** the folder name contains `&`, which breaks `npx` and npm's `.bin` shims on Windows. The npm scripts call the Expo CLI through `node` directly, so use `npm start` instead of `npx expo start`. To add packages, run `node node_modules/expo/bin/cli install <pkg>`.
 
+### Mock data vs. real API
+
+The app runs against an in-memory mock backend by default. To point it at a real server, copy `Frontend/.env.example` to `Frontend/.env`, set `EXPO_PUBLIC_USE_MOCK_DATA=false` and `EXPO_PUBLIC_API_URL`, then restart `npm start`. No screen or store changes are needed: every call goes through `src/services/*Service.ts`, which picks the mock or the Axios client (`src/services/api.ts`).
+
+API contract the backend must follow (every response is `{ success, data, error }`, authenticated calls send `Authorization: Bearer <token>`):
+
+| Method | Path | Returns |
+|---|---|---|
+| POST | `/auth/login` `{ email, password }` | `{ token, user }` |
+| POST | `/auth/signup` `{ name, email, password }` | `{ token, user }` |
+| PATCH | `/users/me` `{ name, headline }` | `User` |
+| GET | `/users/:id` | `{ id, name, headline }` |
+| GET | `/events` | `EventItem[]` |
+| GET | `/me/rsvps` | `string[]` (event ids) |
+| PUT | `/events/:id/rsvp` `{ isGoing }` | `{ eventId, isGoing, attendeeCount }` |
+| GET | `/events/:id/attendees?limit=N` | `{ id, name, headline }[]` |
+| GET | `/events/:id/comments` | comments, newest first, each with `author` |
+| POST | `/events/:id/comments` `{ body }` | the created comment with `author` |
+
+A `401` from any authenticated call signs the user out; `401` from login/signup is shown as a normal error.
+
 ### Project structure
 
 ```

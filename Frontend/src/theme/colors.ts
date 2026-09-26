@@ -39,6 +39,12 @@ export const lightColors: ColorPalette = {
   border: '#DCDFE8',
 };
 
+/** Appends an alpha channel to a 6-digit hex token, e.g. withAlpha(colors.primary, 0.2). */
+export function withAlpha(hex: string, alpha: number): string {
+  const channel = Math.round(Math.min(Math.max(alpha, 0), 1) * 255);
+  return `${hex}${channel.toString(16).padStart(2, '0')}`;
+}
+
 export function useThemeColors(): ColorPalette {
   return useColorScheme() === 'light' ? lightColors : darkColors;
 }

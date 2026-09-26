@@ -99,7 +99,7 @@ npm install
 npm run emulators
 ```
 
-This starts the Auth emulator (`127.0.0.1:9099`), the Firestore emulator (`127.0.0.1:8080`) and the Emulator UI at http://127.0.0.1:4000. The default project is `demo-local-events-hub`: `demo-` projects run entirely locally, need no `firebase login`, and can't reach real Firebase services.
+This starts the Auth emulator (`127.0.0.1:9099`), the Firestore emulator (`127.0.0.1:8080`) and the Emulator UI at http://127.0.0.1:4000. The emulator scripts always use the project `demo-local-events-hub`, even though `.firebaserc` points to the real project. `demo-` projects run entirely locally, need no `firebase login`, and can't reach real Firebase services.
 
 > **Windows note:** as with the frontend, the `&` in the folder name breaks npm's `.bin` shims, so use `npm run emulators` or `npm run firebase -- <command>` rather than `npx firebase ...`.
 
@@ -124,7 +124,8 @@ It needs no service account key.
 |---|---|
 | `npm run emulators` | Start the Auth + Firestore emulators and the Emulator UI |
 | `npm run seed:emulator` | Wipe and re-seed the emulators |
-| `npm test` | Run the backend tests |
+| `npm test` | Unit tests (no emulator needed) |
+| `npm run test:emulator` | Start throwaway emulators, run the emulator tests (signup flow + security rules), stop them |
 | `npm run typecheck` | TypeScript check |
 
 ### Link the real Firebase project (Spark plan)
@@ -137,8 +138,40 @@ It needs no service account key.
 ### Secrets: what's safe to commit
 
 - **Safe (not a secret):** the client-side Firebase config (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) from **Project Settings → Your apps**. It only identifies the project and ships inside the app. Access is enforced by `firestore.rules` and Firebase Auth, not by keeping this config hidden.
-- **Secret (never commit):** a **service account key** (`serviceAccountKey.json`). It grants full admin access and bypasses all security rules. It's used only by the local seed script, and `Backend/.gitignore` blocks `*serviceAccountKey*.json` and `.env*`.
+- **Secret (never commit):** a **service account key** (`serviceAccountKey.json`). It grants full admin access and bypasses all security rules. Nothing in this repo needs one (the seed script runs against the emulator with no credentials), and `Backend/.gitignore` blocks `*serviceAccountKey*.json` and `.env*` in case one is ever downloaded.
+
+### Signup contract (client-side)
+
+**Every signup screen must follow this.** Signup and login run entirely in the app through the Firebase Auth SDK, which hashes and salts passwords, so there's nothing to build for that. On the Spark plan there's no Auth trigger (that needs Cloud Functions), so **the app itself must create the user's profile document**:
+
+1. Call `createUserWithEmailAndPassword(auth, email, password)`.
+2. **Immediately after it succeeds, in the same signup function**, create `users/{uid}` (with `uid` from the returned credential) containing exactly:
+
+   | Field | Value |
+   |---|---|
+   | `name` | the entered name, trimmed (1–80 characters) |
+   | `email` | `credential.user.email` (the account's own email) |
+   | `role` | **the literal `"attendee"`. Hardcode it; never take it from a form field, route param or any other input** |
+   | `avatarUrl` | `""` |
+
+3. If the profile write fails, delete the just-created Auth user (`deleteUser(credential.user)`) and show the error. Otherwise the account exists with no profile, and the email is "taken" forever.
+4. Log in with `signInWithEmailAndPassword`. The profile already exists, so there's nothing else to write.
+
+The reference implementation is `Backend/src/signUp.ts`. Use it as-is in the app. `firestore.rules` enforces the same contract server-side, so a modified or hand-crafted client is rejected if it tries to:
+- create a profile for another uid;
+- use any role other than `attendee`;
+- add extra fields;
+- use an email that isn't the account's own;
+- use a blank or over-long name;
+- overwrite an existing profile.
+
+`Backend/tests/signup.emulator.test.ts` checks each of these (`npm run test:emulator`).
 
 ### Promoting a user to organizer or admin
 
-New users are created as `attendee`. The Spark plan has no Cloud Functions to change roles, so an organizer or admin role is set **manually in the Firebase Console**: go to **Firestore Database → `users/{userId}`**, edit the `role` field to `organizer` or `admin`, and save. Console edits go through the Admin API, so the security rules that stop users from changing their own role don't block them.
+Everyone signs up as `attendee`. The Spark plan has no admin Cloud Function, so for testing and demos, promote a user by hand:
+
+- **Real project:** open the [Firebase Console](https://console.firebase.google.com) → **Firestore Database**, open `users/{userId}`, change the `role` field to `organizer` or `admin`, and save.
+- **Emulators:** do the same in the Emulator UI at http://127.0.0.1:4000/firestore.
+
+Console and Emulator UI edits go through the Admin API, so they aren't blocked by the rules that stop users from changing their own role. The user's app picks up the new role the next time it reads their profile.

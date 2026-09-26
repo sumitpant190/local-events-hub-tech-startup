@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "demo-local-events-hub"
-  }
+    "default": "events-hub-techstartup"
+  },
+  "targets": {},
+  "etags": {}
 }

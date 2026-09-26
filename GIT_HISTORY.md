@@ -351,3 +351,28 @@
 - **Blaze check:** the seed runs locally against the emulators. Nothing is deployed, and nothing needs Blaze.
 - **npm audit:** 5 moderate advisories in transitive dependencies of the dev tooling (`@opentelemetry/core`, `uuid`, via firebase-admin/firebase-tools). They're dev-only, not shipped, and `audit fix --force` would downgrade major versions, so they're left as is.
 - **Windows gotcha:** stopping the backgrounded `npm run emulators` doesn't kill its Java/Node children, so leftover emulators kept ports 8080/9099 busy. They had to be stopped by PID. Stop emulators with Ctrl+C in their own terminal.
+
+## Phase 3 — Auth
+**Date:** 2026-09-26
+**Summary:** Documented the client-side signup contract (Auth SDK signup, then the app creates `users/{uid}` with `role: "attendee"` hardcoded), because the Spark plan has no Auth triggers. Added a reference `signUp()` and the first Firestore rule, which lets a signed-in user create only their own attendee profile and read only their own profile. Added emulator tests that sign up against the Auth emulator, write the profile the way the app will, and prove tampered clients are rejected.
+**Files added/changed:**
+- Backend/firestore.rules — `users/{userId}`: own-profile `get`; `create` only for your own uid, with exactly {name, email, role, avatarUrl}, `role == 'attendee'`, email equal to the auth token's email, name 1–80 non-blank characters, and avatarUrl a string of at most 2048 characters. Everything else stays deny-all.
+- Backend/src/signUp.ts — reference signup: `createUserWithEmailAndPassword`, then `setDoc(users/{uid})` with the hardcoded attendee role; rolls back the Auth user if the profile write fails
+- Backend/tests/signup.emulator.test.ts — 7 emulator tests covering the happy path, role escalation to organizer/admin, extra fields, missing fields, a spoofed email, blank or long names, another user's uid (create and read), overwriting an existing profile, signed-out writes, and the rollback on failure
+- Backend/scripts/runEmulatorTests.ts — runs test files inside `emulators:exec`, then on Windows shuts the Firestore emulator down through its `/shutdown` endpoint
+- Backend/package.json, package-lock.json — `firebase` 12.19.0 (client SDK, dev); a `test:emulator` script; `emulators` pinned to `--project demo-local-events-hub`
+- Backend/.firebaserc, Backend/firebase.json — your own `firebase use`/`init` changes (default project `events-hub-techstartup`, Firestore location `nam5`), committed as-is
+- README.md — "Signup contract (client-side)", an expanded role-promotion section (Console and Emulator UI), the `test:emulator` script, the emulator project pinning, and a corrected service-account note (nothing in the repo needs a key)
+**Commit:** `feat(auth): add client-side signup contract with attendee-only profile rule`
+**Verified:**
+- `npm run typecheck`: clean.
+- `npm test`: 5/5 pass.
+- `npm run test:emulator`: 7/7 pass, run twice back to back with both exiting 0. No emulator process was left listening on 4000/8080/9099 afterwards.
+- `npm run emulators` reported "All emulators ready!" on the demo project with no errors, and `npm run seed:emulator` still seeds 4 users, 12 events, 28 RSVPs and 24 comments.
+**Notes/decisions:**
+- **Why a rule in the Auth phase:** the Phase 1 deny-all rule would reject the app's own profile write, so the step 3 test couldn't pass. Also, "role hardcoded to attendee" only protects anything if the server enforces it, since anyone can call Firestore with the public config. Only the signup-related grants were added: own-profile create and own-profile read. Profile updates, reading other users' public profiles and admin access are left for the rules phase.
+- **Create-only:** Firestore treats a write to an existing doc as `update`, which is still denied, so signing up again can never reset a promoted role or overwrite a profile.
+- **Emulators pinned to the demo project:** `.firebaserc` now defaults to the real project `events-hub-techstartup`, so `npm run emulators` and `test:emulator` pass `--project demo-local-events-hub`. Local runs stay isolated from production and match the seed script's project. `npm run firebase -- deploy --only firestore:rules` still targets the real project. The rules have not been deployed.
+- **Windows bug found and fixed:** `firebase emulators:exec` exits without stopping the Firestore emulator's Java process on Windows, so the next run fails with "port taken". The test runner now POSTs to the emulator's `/shutdown` endpoint when the tests finish.
+- **Email normalisation:** the profile uses `credential.user.email`, which Firebase lowercases, so it always matches `request.auth.token.email`. The test signs up with an uppercase email to check this.
+- **Blaze check:** everything is client SDK plus Security Rules. There's no Auth trigger or Cloud Function, and nothing needs Blaze.

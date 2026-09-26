@@ -1,9 +1,39 @@
 rules_version = '2';
 
-// Production mode: deny everything by default. Each collection gets its own explicit grant in later
-// phases; nothing is ever opened with a blanket or time-limited "test mode" rule.
+// Production mode: deny everything by default. Each collection gets its own explicit grant;
+// nothing is ever opened with a blanket or time-limited "test mode" rule.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Signup profile: exactly the schema keys, the account's own email, and role forced to attendee.
+    // Promotion to organizer/admin happens only in the Firebase Console (Admin API, bypasses rules).
+    function isValidNewUser(data) {
+      return data.keys().hasOnly(['name', 'email', 'role', 'avatarUrl'])
+        && data.keys().hasAll(['name', 'email', 'role', 'avatarUrl'])
+        && data.name is string
+        && data.name.trim().size() > 0
+        && data.name.size() <= 80
+        && data.email == request.auth.token.email
+        && data.role == 'attendee'
+        && data.avatarUrl is string
+        && data.avatarUrl.size() <= 2048;
+    }
+
+    match /users/{userId} {
+      // Own profile only; listing users (emails) stays denied.
+      allow get: if isSelf(userId);
+      // Create only, so an existing profile (and a promoted role) can never be overwritten by signup.
+      allow create: if isSelf(userId) && isValidNewUser(request.resource.data);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -136,3 +136,32 @@
 - Search matches titles only, is case-insensitive and ignores surrounding whitespace, and it combines with the category filter. Filter state is local to the screen because nothing else needs it.
 - Cover images are placeholders (a category icon on a tinted cover), since the mock events have no image URLs.
 - filterEvents was checked with a one-off Node assert script covering no filter, whitespace query, category only, case-insensitive title, query plus category, and title-only matching.
+
+## Phase 6 — Event details & RSVP
+**Date:** 2026-09-26
+**Summary:** Rebuilt EventDetails as a full event page. It has a parallax hero, a floating back button, and a rounded content sheet with the date/time range, venue and address, attendee count with an animated capacity bar, a "You + N others going" avatar preview, an organizer card, the description and tags. A sticky RSVP button toggles with a spring pop, a surface→primary color transition and a spinning icon. The attendee count updates optimistically in eventsStore and rolls back if the mock request fails.
+**Files added/changed:**
+- Frontend/src/store/eventsStore.ts — rsvpEventIds, pendingRsvpIds, rsvpError and an optimistic toggleRsvp(eventId) with rollback
+- Frontend/src/utils/rsvp.ts — isEventFull() and adjustAttendeeCount() (immutable, clamped to 0..capacity)
+- Frontend/src/services/mockApi.ts — updateRsvp() (400ms mock write), getAttendeePreview() (deterministic faces)
+- Frontend/src/utils/date.ts — formatEventRange() for same-day and multi-day events
+- Frontend/src/components/RsvpButton.tsx — pop animation, color transition, icon spin-in, disabled "Event full" state
+- Frontend/src/components/AttendeePreview.tsx — overlapping avatar stack; your avatar zooms in, and the label animates when it changes
+- Frontend/src/components/Avatar.tsx — initials avatar with an optional highlighted (current user) style
+- Frontend/src/components/EventHero.tsx — category hero with parallax and pull-down stretch driven by scroll
+- Frontend/src/components/BackButton.tsx — floating translucent back button
+- Frontend/src/components/InfoRow.tsx — icon tile + title/subtitle row
+- Frontend/src/components/CapacityBar.tsx — spring-animated fill that switches to accent above 85% full
+- Frontend/src/components/OrganizerCard.tsx — "Hosted by" card
+- Frontend/src/components/PressableScale.tsx — added disabled prop
+- Frontend/src/screens/EventDetailsScreen.tsx — full details layout, sticky RSVP bar, not-found state
+**Commit:** `feat(events): add optimistic rsvp toggle to events store`, `feat(ui): add rsvp button, avatar stack and event hero components`, `feat(events): build event details screen with rsvp and attendee preview`, `docs: log phase 6 in git history`
+**Notes/decisions:**
+- Optimistic flow: flip the state and count right away, call `updateRsvp`, and on failure restore the previous state and show an error banner. Toggles for an event are ignored while its request is in flight, so rapid double taps can't corrupt the count. Joining a full event is blocked, and the button shows "Event full" (evt-08 is at capacity for testing).
+- The count is updated in both `events` and `selectedEvent`, so the list and the details screen stay in sync.
+- The details screen falls back to the list copy of the event on its first frame, so it never flashes "not found" before `selectEvent` runs.
+- The hero is still a placeholder (category icon on brand glows), since events have no images. Scrolling parallaxes it at half speed, and pulling down stretches it up to 2×.
+- The attendee faces are deterministic: the event's commenters first, then other mock users, excluding the current user.
+- RSVPs live in eventsStore for the session and aren't tied to a user, so they survive logout. Per-user RSVPs will come with the backend.
+- The RSVP label switches color instantly while the background animates, because moti's MotiText typing doesn't allow animating `color`.
+- The RSVP helpers were checked with a one-off Node assert script covering increment to capacity, clamping at capacity and zero, no input mutation, and rollback restoring the count.

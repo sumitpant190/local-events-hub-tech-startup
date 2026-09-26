@@ -82,3 +82,28 @@
 - Event venues and addresses are made up and have no city, since the target city hasn't been decided yet.
 - Dates are ISO-8601 in UTC and are formatted with the device locale.
 - The mock data was checked with a one-off Node script: unique IDs, valid user/event references, attendance within capacity, start before end, and at least 2 comments per event. There's still no test runner in the project, so store unit tests will come when one is added.
+
+## Phase 4 — Login & Signup
+**Date:** 2026-09-26
+**Summary:** Built fully styled Login (email, password) and Signup (name, email, password, confirm password) screens. They validate input, show errors that animate in and out, and sign in against mock credentials. On mount the header, glass card, each field, the button and the footer fade up in sequence over two slowly pulsing brand-colored glows. A successful login or signup sets `isLoggedIn` and lands on EventsList.
+**Files added/changed:**
+- Frontend/src/theme/colors.ts — added withAlpha() for translucent token variants
+- Frontend/src/components/FadeInUp.tsx — staggered fade-up wrapper driven by an index
+- Frontend/src/components/AnimatedMessage.tsx — error text/banner that animates height, opacity and position in and out
+- Frontend/src/components/FormField.tsx — labelled input with animated focus/error border, password show/hide toggle and inline error
+- Frontend/src/components/BackgroundGlow.tsx — two looping primary/accent glow orbs
+- Frontend/src/components/AuthScreenLayout.tsx — shared auth shell: glow background, keyboard-aware scroll, eyebrow pill, headline, card, footer
+- Frontend/src/components/AuthFooterLink.tsx — "prompt + action" switch link with press feedback
+- Frontend/src/utils/validation.ts — validateLogin/validateSignup, hasErrors, MIN_PASSWORD_LENGTH (8), MAX_NAME_LENGTH (60)
+- Frontend/src/services/mockApi.ts — in-memory mock accounts, authenticate(), registerAccount(), DEMO_PASSWORD
+- Frontend/src/store/authStore.ts — login(email, password) and signup(name, email, password) now return { ok } or { ok: false, error }
+- Frontend/src/screens/LoginScreen.tsx — validated login form with demo credentials hint
+- Frontend/src/screens/SignupScreen.tsx — validated signup form
+**Commit:** `feat(ui): add form field, animated message and fade-in-up components`, `feat(auth): check passwords and block duplicate emails in mock auth`, `feat(auth): build validated login and signup screens`, `docs: log phase 4 in git history`
+**Notes/decisions:**
+- Errors stay hidden until the first submit, then update live as the user types. A form-level banner shows auth failures ("Incorrect email or password.", "An account with this email already exists.").
+- All mock users share the demo password `startup123` (for example maya@loopdesk.io / startup123), and the Login screen shows this hint. Mock passwords are plaintext and in memory only. The backend phase replaces this.
+- The auth store re-checks name, email and password length even though the forms already validate them, so bad data can't get in through another caller.
+- Errors animate to their measured height rather than using moti's `AnimatePresence`. That comes from the nested framer-motion copy, which bundles the duplicate React from Phase 1, and could crash with "invalid hook call".
+- The keyboard "next" key moves between fields, "go" submits, and the email fields use email keyboards with autofill hints.
+- The validation rules were checked with a one-off Node assert script covering required fields, email format, whitespace handling, the 8-character minimum, password match and name length.

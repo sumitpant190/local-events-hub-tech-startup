@@ -5,8 +5,8 @@ import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated'
 import type { CommentWithAuthor } from '../services/types';
 import { useAuthStore } from '../store/authStore';
 import { useCommentsStore } from '../store/commentsStore';
-import { useThemeColors, withAlpha } from '../theme/colors';
-import { MAX_STAGGERED_ITEMS, STAGGER_MS } from '../theme/motion';
+import { useThemeColors } from '../theme/colors';
+import { MAX_STAGGERED_ITEMS, STAGGER_MS, timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import AnimatedMessage from './AnimatedMessage';
@@ -43,12 +43,12 @@ export default function CommentsSection({ eventId }: CommentsSectionProps) {
     <View>
       <View style={styles.header}>
         <Text style={[typography.h2, { color: colors.textPrimary }]}>Comments</Text>
-        <View style={[styles.count, { backgroundColor: withAlpha(colors.primary, 0.14) }]}>
+        <View style={[styles.count, { backgroundColor: colors.primaryTint }]}>
           <MotiText
             key={comments.length}
             from={{ opacity: 0, translateY: 6 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 200 }}
+            transition={timings.textSwap}
             style={[typography.label, { color: colors.primary }]}
           >
             {comments.length}

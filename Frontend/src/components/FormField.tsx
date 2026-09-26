@@ -3,6 +3,7 @@ import { MotiView } from 'moti';
 import { useState, type Ref } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { useThemeColors } from '../theme/colors';
+import { timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import AnimatedMessage from './AnimatedMessage';
@@ -32,7 +33,7 @@ export default function FormField({ label, error, isPassword = false, ref, onFoc
           borderColor,
           backgroundColor: isFocused ? colors.surfaceElevated : colors.background,
         }}
-        transition={{ type: 'timing', duration: 180 }}
+        transition={timings.colorShift}
         style={styles.inputWrap}
       >
         <TextInput

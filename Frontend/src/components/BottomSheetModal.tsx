@@ -2,7 +2,7 @@ import { MotiView } from 'moti';
 import { useEffect, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -35,7 +35,7 @@ export default function BottomSheetModal({ visible, onClose, title, children }: 
         from={{ opacity: 0 }}
         animate={{ opacity: visible ? 1 : 0 }}
         transition={{ type: 'timing', duration: BACKDROP_MS }}
-        style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.background, 0.75) }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: colors.scrim }]}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       </MotiView>

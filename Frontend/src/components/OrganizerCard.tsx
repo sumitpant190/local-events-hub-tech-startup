@@ -18,7 +18,7 @@ export default function OrganizerCard({ organizer }: OrganizerCardProps) {
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Avatar name={organizer.name} size={AVATAR_SIZE} />
       <View style={styles.text}>
-        <Text style={[typography.caption, { color: colors.textSecondary }]}>HOSTED BY</Text>
+        <Text style={[typography.overline, { color: colors.textSecondary }]}>HOSTED BY</Text>
         <Text style={[typography.h3, { color: colors.textPrimary }]}>{organizer.name}</Text>
         <Text style={[typography.caption, { color: colors.textSecondary }]}>{organizer.headline}</Text>
       </View>

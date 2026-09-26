@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { fonts } from '../theme/typography';
 
 type AvatarProps = {
@@ -36,7 +36,7 @@ export default function Avatar({ name, size = DEFAULT_SIZE, isHighlighted = fals
           height: size,
           borderRadius: size / 2,
           borderColor: colors.surface,
-          backgroundColor: isHighlighted ? colors.primary : withAlpha(colors.accent, 0.18),
+          backgroundColor: isHighlighted ? colors.primary : colors.accentTint,
         },
       ]}
     >
@@ -44,7 +44,7 @@ export default function Avatar({ name, size = DEFAULT_SIZE, isHighlighted = fals
         style={{
           fontFamily: fonts.bodySemiBold,
           fontSize: size * INITIALS_RATIO,
-          color: isHighlighted ? colors.onPrimary : colors.accent,
+          color: isHighlighted ? colors.onPrimary : colors.accentText,
         }}
       >
         {getInitials(name)}

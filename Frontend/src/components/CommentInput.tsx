@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { CommentResult } from '../store/commentsStore';
 import { useThemeColors } from '../theme/colors';
+import { timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { MAX_COMMENT_LENGTH, sanitizeComment } from '../utils/sanitize';
@@ -55,7 +56,7 @@ export default function CommentInput({ authorName, isPosting, onSubmit }: Commen
             borderColor: isFocused ? colors.primary : colors.border,
             backgroundColor: isFocused ? colors.surfaceElevated : colors.surface,
           }}
-          transition={{ type: 'timing', duration: 180 }}
+          transition={timings.colorShift}
           style={styles.inputWrap}
         >
           <TextInput
@@ -91,7 +92,7 @@ export default function CommentInput({ authorName, isPosting, onSubmit }: Commen
           <AnimatedMessage message={error} />
         </View>
         <Text
-          style={[typography.caption, { color: remaining <= COUNTER_WARNING_AT ? colors.error : colors.textSecondary }]}
+          style={[typography.caption, { color: remaining <= COUNTER_WARNING_AT ? colors.errorText : colors.textSecondary }]}
           accessibilityLabel={`${remaining} characters left`}
         >
           {remaining}

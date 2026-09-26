@@ -19,7 +19,8 @@ import RsvpButton from '../components/RsvpButton';
 import type { EventsStackParamList } from '../navigation/types';
 import { useAuthStore } from '../store/authStore';
 import { useEventsStore } from '../store/eventsStore';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
+import { timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { formatEventRange } from '../utils/date';
@@ -122,7 +123,7 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
             </Text>
             <View style={styles.tags}>
               {event.tags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: withAlpha(colors.primary, 0.12) }]}>
+                <View key={tag} style={[styles.tag, { backgroundColor: colors.primaryTint }]}>
                   <Text style={[typography.caption, { color: colors.primary }]}>#{tag}</Text>
                 </View>
               ))}
@@ -148,7 +149,7 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
               key={event.attendeeCount}
               from={{ opacity: 0, translateY: 6 }}
               animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 220 }}
+              transition={timings.textSwap}
               style={[typography.h3, { color: colors.textPrimary }]}
             >
               {event.attendeeCount} going

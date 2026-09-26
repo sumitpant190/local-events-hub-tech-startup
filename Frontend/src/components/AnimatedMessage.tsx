@@ -1,7 +1,7 @@
 import { MotiView } from 'moti';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -45,8 +45,8 @@ export default function AnimatedMessage({ message, variant = 'inline' }: Animate
           accessibilityLiveRegion="polite"
           style={[
             isBanner ? typography.label : typography.caption,
-            { color: colors.error },
-            isBanner && [styles.banner, { backgroundColor: withAlpha(colors.error, 0.12), borderColor: withAlpha(colors.error, 0.35) }],
+            { color: colors.errorText },
+            isBanner && [styles.banner, { backgroundColor: colors.errorTint, borderColor: colors.errorBorder }],
             !isBanner && styles.inline,
           ]}
         >

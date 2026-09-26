@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, Text } from 'react-native';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import type { IconName } from '../utils/categoryIcons';
@@ -22,7 +22,7 @@ export default function EmptyState({ icon, title, message, actionLabel, onAction
 
   return (
     <FadeInUp style={styles.container}>
-      <Ionicons name={icon} size={ICON_SIZE} color={withAlpha(colors.primary, 0.8)} />
+      <Ionicons name={icon} size={ICON_SIZE} color={colors.primary} />
       <Text style={[typography.h3, styles.title, { color: colors.textPrimary }]}>{title}</Text>
       <Text style={[typography.body, styles.message, { color: colors.textSecondary }]}>{message}</Text>
       {actionLabel && onAction ? <AppButton label={actionLabel} variant="ghost" onPress={onAction} /> : null}

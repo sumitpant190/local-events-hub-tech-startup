@@ -15,8 +15,8 @@ import type { MainTabParamList } from '../navigation/types';
 import type { EventItem } from '../services/types';
 import { useAuthStore } from '../store/authStore';
 import { useEventsStore } from '../store/eventsStore';
-import { useThemeColors, withAlpha } from '../theme/colors';
-import { springs, STAGGER_MS } from '../theme/motion';
+import { useThemeColors } from '../theme/colors';
+import { durations, springs, STAGGER_MS } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -54,14 +54,14 @@ export default function ProfileScreen({ navigation }: Props) {
             from={{ scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={springs.entrance}
-            style={[styles.avatarRing, { borderColor: withAlpha(colors.primary, 0.4) }]}
+            style={[styles.avatarRing, { borderColor: colors.primaryBorder }]}
           >
             <Avatar name={currentUser.name} size={AVATAR_SIZE} isHighlighted />
           </MotiView>
           <Text style={[typography.h1, styles.centered, { color: colors.textPrimary }]}>{currentUser.name}</Text>
           <Text style={[typography.body, { color: colors.textSecondary }]}>{currentUser.email}</Text>
           {currentUser.headline ? (
-            <Text style={[typography.label, styles.headline, { color: colors.accent }]}>{currentUser.headline}</Text>
+            <Text style={[typography.label, styles.headline, { color: colors.accentText }]}>{currentUser.headline}</Text>
           ) : null}
           <AppButton label="Edit profile" variant="ghost" onPress={() => setIsEditing(true)} />
         </FadeInUp>
@@ -69,7 +69,7 @@ export default function ProfileScreen({ navigation }: Props) {
         <FadeInUp index={1} style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[typography.h2, { color: colors.textPrimary }]}>My RSVPs</Text>
-            <View style={[styles.count, { backgroundColor: withAlpha(colors.primary, 0.14) }]}>
+            <View style={[styles.count, { backgroundColor: colors.primaryTint }]}>
               <Text style={[typography.label, { color: colors.primary }]}>{myEvents.length}</Text>
             </View>
           </View>
@@ -87,7 +87,7 @@ export default function ProfileScreen({ navigation }: Props) {
               <Animated.View
                 key={event.id}
                 entering={EnterFadeUp.delay(index * STAGGER_MS).springify().damping(SPRING_DAMPING)}
-                exiting={FadeOut.duration(150)}
+                exiting={FadeOut.duration(durations.fast)}
                 layout={LinearTransition.springify().damping(SPRING_DAMPING)}
               >
                 <EventListItem event={event} onPress={openEvent} />

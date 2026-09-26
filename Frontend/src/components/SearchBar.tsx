@@ -3,6 +3,7 @@ import { MotiView } from 'moti';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput } from 'react-native';
 import { useThemeColors } from '../theme/colors';
+import { timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -25,7 +26,7 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Search e
         borderColor: isFocused ? colors.primary : colors.border,
         backgroundColor: isFocused ? colors.surfaceElevated : colors.surface,
       }}
-      transition={{ type: 'timing', duration: 180 }}
+      transition={timings.colorShift}
       style={styles.container}
     >
       <Ionicons name="search-outline" size={ICON_SIZE} color={isFocused ? colors.primary : colors.textSecondary} />
@@ -44,7 +45,7 @@ export default function SearchBar({ value, onChangeText, placeholder = 'Search e
       />
       <MotiView
         animate={{ opacity: hasText ? 1 : 0, scale: hasText ? 1 : 0.6 }}
-        transition={{ type: 'timing', duration: 150 }}
+        transition={timings.fast}
         pointerEvents={hasText ? 'auto' : 'none'}
       >
         <Pressable onPress={() => onChangeText('')} hitSlop={spacing.md} accessibilityRole="button" accessibilityLabel="Clear search">

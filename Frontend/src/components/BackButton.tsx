@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import PressableScale from './PressableScale';
 
 type BackButtonProps = {
@@ -19,7 +19,7 @@ export default function BackButton({ onPress, style }: BackButtonProps) {
     <PressableScale
       onPress={onPress}
       accessibilityLabel="Go back"
-      style={[styles.button, { backgroundColor: withAlpha(colors.background, 0.7), borderColor: colors.border }, style]}
+      style={[styles.button, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }, style]}
     >
       <Ionicons name="arrow-back" size={ICON_SIZE} color={colors.textPrimary} />
     </PressableScale>

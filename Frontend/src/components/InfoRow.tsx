@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import type { IconName } from '../utils/categoryIcons';
@@ -22,7 +22,7 @@ export default function InfoRow({ icon, title, subtitle, right }: InfoRowProps) 
 
   return (
     <View style={styles.row}>
-      <View style={[styles.tile, { backgroundColor: withAlpha(colors.primary, 0.14) }]}>
+      <View style={[styles.tile, { backgroundColor: colors.primaryTint }]}>
         <Ionicons name={icon} size={ICON_SIZE} color={colors.primary} />
       </View>
       <View style={styles.text}>

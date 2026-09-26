@@ -1,9 +1,14 @@
 import { MotiText, MotiView } from 'moti';
 import { StyleSheet, View } from 'react-native';
 import { useThemeColors } from '../theme/colors';
-import { spacing } from '../theme/spacing';
+import { durations } from '../theme/motion';
+import { radius, spacing } from '../theme/spacing';
+import { systemTypography } from '../theme/typography';
 
-// Shown while custom fonts load, so it uses the system font on purpose.
+const SUBTITLE_DELAY_MS = 250;
+const DOT_SIZE = 8;
+
+// Shown while custom fonts load, so it uses the system font (systemTypography) on purpose.
 export default function SplashLoader() {
   const colors = useThemeColors();
 
@@ -12,23 +17,23 @@ export default function SplashLoader() {
       <MotiText
         from={{ opacity: 0, translateY: 8 }}
         animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 700 }}
-        style={[styles.title, { color: colors.textPrimary }]}
+        transition={{ type: 'timing', duration: durations.splash }}
+        style={[systemTypography.splashTitle, { color: colors.textPrimary }]}
       >
         Local Events Hub
       </MotiText>
       <MotiText
         from={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ type: 'timing', duration: 700, delay: 250 }}
-        style={[styles.subtitle, { color: colors.accent }]}
+        transition={{ type: 'timing', duration: durations.splash, delay: SUBTITLE_DELAY_MS }}
+        style={[systemTypography.splashEyebrow, styles.subtitle, { color: colors.accentText }]}
       >
         TECH & STARTUP
       </MotiText>
       <MotiView
         from={{ opacity: 0.3, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1.2 }}
-        transition={{ type: 'timing', duration: 800, loop: true }}
+        transition={{ type: 'timing', duration: durations.pulse, loop: true }}
         style={[styles.dot, { backgroundColor: colors.primary }]}
       />
     </View>
@@ -41,21 +46,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    marginTop: spacing.sm,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 3,
-  },
+  subtitle: { marginTop: spacing.sm },
   dot: {
     marginTop: spacing.xxl,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: radius.pill,
   },
 });

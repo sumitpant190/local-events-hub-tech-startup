@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { LinearTransition, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import type { PublicUser } from '../services/types';
 import { useThemeColors } from '../theme/colors';
+import { durations, timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import Avatar from './Avatar';
@@ -44,7 +45,7 @@ export default function AttendeePreview({ attendeeCount, isGoing, currentUser, f
           <Animated.View
             key={user.id}
             entering={isSelf ? ZoomIn.springify().damping(SPRING_DAMPING) : undefined}
-            exiting={isSelf ? ZoomOut.duration(160) : undefined}
+            exiting={isSelf ? ZoomOut.duration(durations.fast) : undefined}
             layout={LinearTransition.springify().damping(SPRING_DAMPING)}
             style={[index > 0 && styles.overlap, { zIndex: stack.length - index }]}
           >
@@ -57,7 +58,7 @@ export default function AttendeePreview({ attendeeCount, isGoing, currentUser, f
         key={label}
         from={{ opacity: 0, translateY: 6 }}
         animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 220 }}
+        transition={timings.textSwap}
         style={[typography.bodyStrong, styles.label, { color: colors.textPrimary }]}
         accessibilityLiveRegion="polite"
       >

@@ -3,7 +3,7 @@ import { MotiView } from 'moti';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import type { EventCategory } from '../services/types';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { springs } from '../theme/motion';
 import { CATEGORY_ICONS } from '../utils/categoryIcons';
 
@@ -37,9 +37,9 @@ export default function EventHero({ category, scrollY }: EventHeroProps) {
   }));
 
   return (
-    <Animated.View style={[styles.hero, { backgroundColor: withAlpha(colors.primary, 0.2) }, heroStyle]}>
-      <View style={[styles.glow, styles.glowTop, { backgroundColor: withAlpha(colors.primary, 0.35) }]} />
-      <View style={[styles.glow, styles.glowBottom, { backgroundColor: withAlpha(colors.accent, 0.18) }]} />
+    <Animated.View style={[styles.hero, { backgroundColor: colors.primarySurface }, heroStyle]}>
+      <View style={[styles.glow, styles.glowTop, { backgroundColor: colors.glowPrimary }]} />
+      <View style={[styles.glow, styles.glowBottom, { backgroundColor: colors.glowAccent }]} />
       <MotiView
         from={{ opacity: 0, scale: 0.6, rotate: '-12deg' }}
         animate={{ opacity: 1, scale: 1, rotate: '0deg' }}

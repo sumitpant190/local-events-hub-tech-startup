@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import BackgroundGlow from './BackgroundGlow';
@@ -31,8 +31,8 @@ export default function AuthScreenLayout({ title, subtitle, children, footer, fo
             showsVerticalScrollIndicator={false}
           >
             <FadeInUp index={0}>
-              <View style={[styles.eyebrow, { backgroundColor: withAlpha(colors.accent, 0.12), borderColor: withAlpha(colors.accent, 0.4) }]}>
-                <Text style={[typography.label, styles.eyebrowText, { color: colors.accent }]}>TECH & STARTUP</Text>
+              <View style={[styles.eyebrow, { backgroundColor: colors.accentTint, borderColor: colors.accentBorder }]}>
+                <Text style={[typography.eyebrow, { color: colors.accentText }]}>TECH & STARTUP</Text>
               </View>
             </FadeInUp>
 
@@ -43,7 +43,7 @@ export default function AuthScreenLayout({ title, subtitle, children, footer, fo
 
             <FadeInUp
               index={2}
-              style={[styles.card, { backgroundColor: withAlpha(colors.surface, 0.92), borderColor: colors.border }]}
+              style={[styles.card, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}
             >
               {children}
             </FadeInUp>
@@ -69,7 +69,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.lg,
   },
-  eyebrowText: { letterSpacing: 2 },
   subtitle: { marginTop: spacing.sm, marginBottom: spacing.xl },
   card: {
     padding: spacing.xl,

@@ -3,7 +3,7 @@ import TabBarIcon from '../components/TabBarIcon';
 import ProfileScreen from '../screens/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { useThemeColors } from '../theme/colors';
-import { fonts } from '../theme/typography';
+import { typography } from '../theme/typography';
 import EventsStack from './EventsStack';
 import type { MainTabParamList } from './types';
 
@@ -20,7 +20,7 @@ export default function MainTabs() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 11 },
+        tabBarLabelStyle: typography.tabLabel,
       }}
     >
       <Tab.Screen

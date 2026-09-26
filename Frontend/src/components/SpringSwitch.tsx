@@ -2,6 +2,7 @@ import { MotiView } from 'moti';
 import { useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useThemeColors } from '../theme/colors';
+import { timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 
 type SpringSwitchProps = {
@@ -39,7 +40,7 @@ export default function SpringSwitch({ value, onValueChange, accessibilityLabel 
           backgroundColor: value ? colors.primary : colors.surfaceElevated,
           borderColor: value ? colors.primary : colors.border,
         }}
-        transition={{ type: 'timing', duration: 200 }}
+        transition={timings.colorShift}
         style={styles.track}
       >
         <MotiView

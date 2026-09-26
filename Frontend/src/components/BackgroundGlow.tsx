@@ -1,6 +1,6 @@
 import { MotiView } from 'moti';
 import { StyleSheet, View } from 'react-native';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 
 const GLOW_SIZE = 340;
 const GLOW_PULSE_MS = 4200;
@@ -15,13 +15,13 @@ export default function BackgroundGlow() {
         from={{ scale: 1, opacity: 0.8 }}
         animate={{ scale: 1.15, opacity: 1 }}
         transition={{ type: 'timing', duration: GLOW_PULSE_MS, loop: true }}
-        style={[styles.orb, styles.topRight, { backgroundColor: withAlpha(colors.primary, 0.22) }]}
+        style={[styles.orb, styles.topRight, { backgroundColor: colors.glowPrimary }]}
       />
       <MotiView
         from={{ scale: 1.1, opacity: 1 }}
         animate={{ scale: 0.95, opacity: 0.7 }}
         transition={{ type: 'timing', duration: GLOW_PULSE_MS, loop: true }}
-        style={[styles.orb, styles.bottomLeft, { backgroundColor: withAlpha(colors.accent, 0.14) }]}
+        style={[styles.orb, styles.bottomLeft, { backgroundColor: colors.glowAccent }]}
       />
     </View>
   );

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import type { EventItem } from '../services/types';
-import { useThemeColors, withAlpha } from '../theme/colors';
+import { useThemeColors } from '../theme/colors';
 import { CARD_PRESSED_SCALE } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -37,11 +37,11 @@ export default function EventCard({ event, onPress }: EventCardProps) {
       style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
       {/* Cover placeholder until events carry real images. */}
-      <View style={[styles.cover, { backgroundColor: withAlpha(colors.primary, 0.16) }]}>
-        <View style={[styles.coverGlow, { backgroundColor: withAlpha(colors.accent, 0.1) }]} />
+      <View style={[styles.cover, { backgroundColor: colors.primarySurface }]}>
+        <View style={[styles.coverGlow, { backgroundColor: colors.glowAccent }]} />
         <Ionicons name={CATEGORY_ICONS[event.category]} size={COVER_ICON_SIZE} color={colors.primary} />
         <View style={[styles.dateTile, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <Text style={[typography.caption, { color: colors.accent }]}>{month}</Text>
+          <Text style={[typography.caption, { color: colors.accentText }]}>{month}</Text>
           <Text style={[typography.h3, { color: colors.textPrimary }]}>{day}</Text>
         </View>
       </View>

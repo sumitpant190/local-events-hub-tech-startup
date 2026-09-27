@@ -267,6 +267,12 @@ describe('rsvps', () => {
     await assertFails(commitRsvp('alice', 'bob', notGoing, { attendeeCount: 1 }));
   });
 
+  // Count-neutral writes: the counter rule passes these, so only the doc-id == caller check can refuse them.
+  test("CANNOT write someone else's RSVP even when the count doesn't move", async () => {
+    await assertFails(commitRsvp('alice', 'oscar', notGoing));
+    await assertFails(commitRsvp('alice', 'bob', going));
+  });
+
   test('CANNOT use an invalid status or extra fields', async () => {
     await assertFails(commitRsvp('oscar', 'oscar', { status: 'maybe', updatedAt: serverTimestamp() }));
     await assertFails(commitRsvp('oscar', 'oscar', { ...going, plusOnes: 5 }, { attendeeCount: 3 }));

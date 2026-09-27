@@ -533,6 +533,10 @@
 - Example responses in the README were captured from the same emulator run.
 **Notes/decisions:**
 - **Emulator vs production differences:** a malformed token returns `400 INVALID_ARGUMENT` on the emulator but `401 UNAUTHENTICATED` on production, so that test accepts either. The emulator's 403 `message` is a rule trace; production returns the generic "Missing or insufficient permissions.". Both were verified in the production run below.
+- **Credentials in the collection:** only the seeded emulator demo account (already documented in the README). `idToken` starts empty and is filled at run time; no service account or real token is committed.
+- **newman isn't a devDependency:** it's run on demand with `npx`, which keeps the backend install unchanged.
+- **APA publish years** come from the npm registry publish date of each installed version. Firebase documentation pages have no publication date, so they are cited as "n.d." with a retrieval date.
+- **Blaze check:** REST calls against Firestore and Auth only; nothing needs Blaze.
 
 ### Phase 7 follow-up — verified on the real project
 **Date:** 2026-09-27
@@ -552,7 +556,53 @@
 - **Role typo caught by the rules:** the first Console promotion saved `role: "tester"`, and event creation was correctly refused until it was corrected to `organizer`. Roles edited by hand aren't validated by the rules (Console edits bypass them), so they must be typed exactly.
 - **Test accounts are kept as demo data** (`tester1@…` organizer, `tester2@…` attendee, plus one Networking event). Their password isn't committed.
 - **Blaze check:** rules and index deploy plus REST calls; nothing needs Blaze.
-- **Credentials in the collection:** only the seeded emulator demo account (already documented in the README). `idToken` starts empty and is filled at run time; no service account or real token is committed.
-- **newman isn't a devDependency:** it's run on demand with `npx`, which keeps the backend install unchanged.
-- **APA publish years** come from the npm registry publish date of each installed version. Firebase documentation pages have no publication date, so they are cited as "n.d." with a retrieval date.
-- **Blaze check:** REST calls against Firestore and Auth only; nothing needs Blaze.
+
+## Phase 8 — Security audit
+**Date:** 2026-09-27
+**Summary:** Went through the 5-item Security & Auth checklist one item at a time, with evidence for each. All 5 pass. The audit found and fixed one test gap (an RSVP guard no test pinned). It also found and contained one leak outside git's main history (the production test password in a local transcript branch).
+**Files changed:**
+- Backend/tests/rules.emulator.test.ts — new test: "CANNOT write someone else's RSVP even when the count doesn't move"
+- README.md — rules test count 82 → 83
+**Commit:** `test(rules): pin RSVP self-scoping and record Phase 8 security audit`
+
+**1. No unauthenticated access — PASS**
+- Static: every `allow` in `firestore.rules` goes through `isSignedIn()`, `isSelf()` or `isOrganizerOrAdmin()`, and each requires `request.auth != null`. Anything unmatched falls to the catch-all `match /{document=**} { allow read, write: if false; }`. There are no wildcard allows.
+- Live on `events-hub-techstartup`: 16 requests with no `Authorization` header, all refused with 403 `PERMISSION_DENIED`, 0 allowed. They covered:
+  - get and list for users, events, rsvps and comments;
+  - create, update and delete for users and events;
+  - an RSVP write and a comment create;
+  - read and create on an undeclared `secrets` collection.
+
+**2. Role spoofing is refused — PASS**
+- All 7 "role spoofing (self-promotion)" tests pass, plus the 2 signup-contract spoofing tests.
+- The tests were checked by mutating the real `firestore.rules`, then restoring it byte-identical to HEAD:
+  - removing the signup `role == 'attendee'` guard fails 3 tests;
+  - removing both self-update guards (`role` unchanged, and `affectedKeys` limited to `name`/`avatarUrl`) fails 4 tests. Either guard alone still refuses self-promotion, which is defence in depth.
+- Live: an attendee's self-promotion to `organizer`/`admin` returns 403 on production (collection and audit probes).
+
+**3. RSVPs and comments act only as yourself — PASS after a fix**
+- Negative tests pass: RSVP as someone else, change someone else's RSVP, post a comment as someone else, delete someone else's comment (including as the event's organizer, and through the service).
+- **Gap found by mutation:** replacing the RSVP rule's `isSelf(userId)` with `isSignedIn()` failed **0** tests. The existing tests wrote `going` with a ±1 count. The counter rule already refuses those, because it checks the caller's own RSVP. A count-neutral write for someone else, such as setting their `not_going` again or re-saving their `going`, would have passed without `isSelf`. The rule itself was correct, but nothing protected it from a future edit.
+- **Fix:** a new test commits count-neutral writes to another user's RSVP and expects them to fail. Re-mutated, it now fails 1 test (the new one). Removing the comment `userId == auth.uid` guard fails 1 test.
+- Full suite after the fix: **83/83 pass**. It was run on alternate emulator ports (8081/9100) so the developer's running emulators weren't disturbed.
+- **Audit note:** mutating a *copy* of the rules proves nothing. The tests load `firestore.rules` from disk with `readFileSync`, so the first attempt reported 0 failures for every mutation. It was discarded and redone on the real file with a restore trap.
+
+**4. No credential files in git history — PASS**
+- All 98 commits on all branches (`main`, `jollimemory/summaries/v3`) were scanned. No file path ever matched `serviceAccount`/`adminsdk`/`.pem`/`.key`/`.env` except `Frontend/.env.example`, whose only version holds non-secret placeholders.
+- Content search: 0 commits ever added `BEGIN PRIVATE KEY`, `"private_key"`, `"type": "service_account"`, `client_email` or `firebase-adminsdk`.
+- Guards: `Backend/.gitignore` ignores `*serviceAccountKey*.json` and `.env*`; `Frontend/.gitignore` ignores `.env`/`.env.*` except `.env.example`.
+- **Related finding, contained:** the Jolli Memory plugin's local branch `jollimemory/summaries/v3` stores conversation transcripts. One of them contains the production test accounts' password, as given in chat during Phase 7. There's no git remote, so it has never left the machine, and it isn't on `main`.
+  - The password was **rotated** on both production test accounts: the old one is now rejected and the new one signs in.
+  - The new password was never printed. It's stored in `Backend/.env.test-accounts`, which `.env*` ignores (confirmed with `git check-ignore`).
+  - The Web API key also appears there; it's public by design (it ships in the app).
+  - **Action for submission:** push or zip `main` only. Don't `git push --all`, and don't zip the project with `.git` unless that branch is deleted.
+
+**5. Still on Spark — PASS (evidence), with one visual confirmation left to the owner**
+- Of the 41 APIs enabled on the project (read via the Service Usage API), **none is Blaze-only**: no Cloud Functions, Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Eventarc or Cloud Scheduler. The set is the standard one Firebase enables at project creation, plus Firestore, Auth and Rules.
+- The Cloud Billing API has never been enabled on the project. It wasn't enabled just to read the plan, so the plan label wasn't read directly.
+- Repo: `firebase.json` configures only `firestore` and `emulators`; no `functions/` folder was ever committed. No deploy in any phase asked to upgrade.
+
+**Notes/decisions:**
+- **Accepted, not changed:** any signed-in user can read every `users` profile, including email. The app shows organiser names and avatars and needs those reads. Splitting emails into a private sub-document would change the Phase 2 schema. Low risk for a campus events app; revisit if the audience widens.
+- **Accepted (from Phase 6):** a tampered client can move `commentCount` by ±1 without commenting. It's display-only, and closing it needs Blaze.
+- **Blaze check:** audit reads plus one password rotation through the Auth REST API; nothing needs Blaze.

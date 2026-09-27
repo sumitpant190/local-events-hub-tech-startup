@@ -415,7 +415,7 @@ That `message` is the emulator's rule trace, which helps with debugging. Product
 
 Both columns of the table above were verified by running the collection on the emulators and on `events-hub-techstartup`. On production an attendee creating an event was also refused (403), and an organizer creating one was allowed (200).
 
-The full allowed/denied matrix (82 cases, SDK-based) is in `Backend/tests/` (`npm run test:emulator`).
+The full allowed/denied matrix (83 cases, SDK-based) is in `Backend/tests/` (`npm run test:emulator`).
 
 ## References
 

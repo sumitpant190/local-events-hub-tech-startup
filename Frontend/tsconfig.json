@@ -1,6 +1,11 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // firebase/auth re-exports @firebase/auth, which Metro resolves to its React Native build at runtime
+    // (that build exports getReactNativePersistence). Type it the same way instead of the browser build.
+    "paths": {
+      "@firebase/auth": ["./node_modules/@firebase/auth/dist/rn/index.rn.d.ts"]
+    }
   }
 }

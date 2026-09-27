@@ -6,7 +6,8 @@ import { CARD_PRESSED_SCALE } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { CATEGORY_ICONS, type IconName } from '../utils/categoryIcons';
-import { formatEventDate, formatEventTime, getDateParts } from '../utils/date';
+import { formatEventDate, formatEventDateTime, getDateParts } from '../utils/date';
+import { toJSDate } from '../utils/firestoreDates';
 import CategoryBadge from './CategoryBadge';
 import PressableScale from './PressableScale';
 
@@ -21,11 +22,12 @@ const META_ICON_SIZE = 14;
 
 export default function EventCard({ event, onPress }: EventCardProps) {
   const colors = useThemeColors();
-  const { month, day } = getDateParts(event.startsAt);
+  const date = toJSDate(event.date);
+  const { month, day } = getDateParts(date);
 
   const metaRows: { icon: IconName; text: string }[] = [
-    { icon: 'calendar-outline', text: `${formatEventDate(event.startsAt)} · ${formatEventTime(event.startsAt)}` },
-    { icon: 'location-outline', text: event.location.venue },
+    { icon: 'calendar-outline', text: formatEventDateTime(date) },
+    { icon: 'location-outline', text: event.location },
     { icon: 'people-outline', text: `${event.attendeeCount} going` },
   ];
 
@@ -33,7 +35,7 @@ export default function EventCard({ event, onPress }: EventCardProps) {
     <PressableScale
       onPress={() => onPress(event)}
       pressedScale={CARD_PRESSED_SCALE}
-      accessibilityLabel={`${event.title}, ${event.category}, ${formatEventDate(event.startsAt)}`}
+      accessibilityLabel={`${event.title}, ${event.category}, ${formatEventDate(date)}`}
       style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
       {/* Cover placeholder until events carry real images. */}

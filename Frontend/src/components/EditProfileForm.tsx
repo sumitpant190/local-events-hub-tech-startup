@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeColors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import { hasErrors, MAX_HEADLINE_LENGTH, validateProfile, type ProfileValues } from '../utils/validation';
+import { hasErrors, validateProfile, type ProfileValues } from '../utils/validation';
 import AnimatedMessage from './AnimatedMessage';
 import AppButton from './AppButton';
 import FormField from './FormField';
@@ -18,7 +18,7 @@ type EditProfileFormProps = {
 export default function EditProfileForm({ user, onDone }: EditProfileFormProps) {
   const colors = useThemeColors();
   const updateProfile = useAuthStore((state) => state.updateProfile);
-  const [values, setValues] = useState<ProfileValues>({ name: user.name, headline: user.headline });
+  const [values, setValues] = useState<ProfileValues>({ name: user.name });
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const isSaving = useRef(false);
@@ -53,15 +53,6 @@ export default function EditProfileForm({ user, onDone }: EditProfileFormProps) 
         error={errors.name}
         autoCapitalize="words"
         autoComplete="name"
-        returnKeyType="next"
-      />
-      <FormField
-        label="Headline"
-        value={values.headline}
-        onChangeText={updateField('headline')}
-        error={errors.headline}
-        placeholder="e.g. Founder, Loopdesk"
-        maxLength={MAX_HEADLINE_LENGTH}
         returnKeyType="done"
         onSubmitEditing={handleSave}
       />

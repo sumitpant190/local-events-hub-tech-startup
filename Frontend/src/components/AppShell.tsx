@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from '../navigation/RootNavigator';
+import { useAuthStore } from '../store/authStore';
 import { useThemeColors } from '../theme/colors';
 import { useThemeScheme } from '../theme/themeContext';
 import { fontAssets } from '../theme/typography';
@@ -22,14 +23,20 @@ export default function AppShell() {
   const { scheme } = useThemeScheme();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+  const isAuthReady = useAuthStore((state) => state.isAuthReady);
+  const startAuthListener = useAuthStore((state) => state.startAuthListener);
 
   useEffect(() => {
     const timer = setTimeout(() => setMinTimeElapsed(true), SPLASH_MIN_MS);
     return () => clearTimeout(timer);
   }, []);
 
+  // Firebase Auth restores a persisted session asynchronously; the listener reports it (or null).
+  useEffect(() => startAuthListener(), [startAuthListener]);
+
+  // Waiting for auth keeps a signed-in user from flashing the Login screen on a cold start.
   // A font error falls back to system fonts rather than trapping the user on the splash.
-  const isReady = (fontsLoaded || fontError != null) && minTimeElapsed;
+  const isReady = (fontsLoaded || fontError != null) && minTimeElapsed && isAuthReady;
 
   return (
     <SafeAreaProvider style={{ backgroundColor: colors.background }}>

@@ -25,6 +25,12 @@
     "plugins": [
       "expo-font",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Local Events Hub uses location services to find event venues on the map."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#0B0E14",

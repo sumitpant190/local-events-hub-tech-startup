@@ -20,7 +20,7 @@ export default function OrganizerCard({ organizer }: OrganizerCardProps) {
       <View style={styles.text}>
         <Text style={[typography.overline, { color: colors.textSecondary }]}>HOSTED BY</Text>
         <Text style={[typography.h3, { color: colors.textPrimary }]}>{organizer.name}</Text>
-        <Text style={[typography.caption, { color: colors.textSecondary }]}>{organizer.headline}</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary }]}>Event organizer</Text>
       </View>
     </View>
   );

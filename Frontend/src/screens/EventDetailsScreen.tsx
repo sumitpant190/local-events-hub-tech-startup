@@ -7,7 +7,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AnimatedMessage from '../components/AnimatedMessage';
 import AttendeePreview from '../components/AttendeePreview';
 import BackButton from '../components/BackButton';
-import CapacityBar from '../components/CapacityBar';
 import CategoryBadge from '../components/CategoryBadge';
 import CommentsSection from '../components/CommentsSection';
 import EmptyState from '../components/EmptyState';
@@ -19,13 +18,14 @@ import OrganizerCard from '../components/OrganizerCard';
 import RsvpButton from '../components/RsvpButton';
 import type { EventsStackParamList } from '../navigation/types';
 import { useAuthStore } from '../store/authStore';
+import { useCommentsStore } from '../store/commentsStore';
 import { useEventsStore } from '../store/eventsStore';
 import { useThemeColors } from '../theme/colors';
 import { timings } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import { formatEventRange } from '../utils/date';
-import { isEventFull } from '../utils/rsvp';
+import { formatEventDateTime } from '../utils/date';
+import { toJSDate } from '../utils/firestoreDates';
 import { useEventPeople } from '../utils/useEventPeople';
 
 type Props = NativeStackScreenProps<EventsStackParamList, 'EventDetails'>;
@@ -41,11 +41,13 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
       : (state.events.find((item) => item.id === eventId) ?? null),
   );
   const isGoing = useEventsStore((state) => state.rsvpEventIds.includes(eventId));
+  const isRsvpPending = useEventsStore((state) => state.pendingRsvpIds.includes(eventId));
   const rsvpError = useEventsStore((state) => state.rsvpError);
   const selectEvent = useEventsStore((state) => state.selectEvent);
   const clearSelectedEvent = useEventsStore((state) => state.clearSelectedEvent);
   const toggleRsvp = useEventsStore((state) => state.toggleRsvp);
   const currentUser = useAuthStore((state) => state.currentUser);
+  const subscribeToComments = useCommentsStore((state) => state.subscribe);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((scrollEvent) => {
@@ -56,6 +58,10 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
     selectEvent(eventId);
     return clearSelectedEvent;
   }, [eventId, selectEvent, clearSelectedEvent]);
+
+  // Live comments while this screen is open. subscribe() returns Firestore's unsubscribe, which React
+  // calls on unmount (or when eventId changes), so no listener outlives the screen.
+  useEffect(() => subscribeToComments(eventId), [eventId, subscribeToComments]);
 
   const { organizer, attendees: faces } = useEventPeople(eventId, event?.organizerId, currentUser?.id);
 
@@ -73,7 +79,7 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
     );
   }
 
-  const spotsLeft = Math.max(event.capacity - event.attendeeCount, 0);
+  const when = formatEventDateTime(toJSDate(event.date));
 
   return (
     <KeyboardAvoidingView
@@ -96,13 +102,10 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
           </FadeInUp>
 
           <FadeInUp index={1} style={styles.section}>
-            <InfoRow icon="calendar-outline" title={formatEventRange(event.startsAt, event.endsAt)} />
-            <InfoRow icon="location-outline" title={event.location.venue} subtitle={event.location.address} />
-            {event.location.coordinates ? (
-              <EventMap coordinates={event.location.coordinates} venue={event.location.venue} />
-            ) : null}
-            <InfoRow icon="people-outline" title={`${event.attendeeCount} attending`} subtitle={`Capacity ${event.capacity}`} />
-            <CapacityBar attendeeCount={event.attendeeCount} capacity={event.capacity} />
+            <InfoRow icon="calendar-outline" title={when} />
+            <InfoRow icon="location-outline" title={event.location} />
+            <EventMap location={event.location} />
+            <InfoRow icon="people-outline" title={`${event.attendeeCount} attending`} />
           </FadeInUp>
 
           <FadeInUp index={2} style={styles.section}>
@@ -125,13 +128,6 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
             <Text style={[typography.body, styles.description, { color: colors.textSecondary }]}>
               {event.description}
             </Text>
-            <View style={styles.tags}>
-              {event.tags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: colors.primaryTint }]}>
-                  <Text style={[typography.caption, { color: colors.primary }]}>#{tag}</Text>
-                </View>
-              ))}
-            </View>
           </FadeInUp>
 
           <FadeInUp index={5} style={styles.section}>
@@ -158,11 +154,9 @@ export default function EventDetailsScreen({ navigation, route }: Props) {
             >
               {event.attendeeCount} going
             </MotiText>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>
-              {spotsLeft > 0 ? `${spotsLeft} spots left` : 'No spots left'}
-            </Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>{when}</Text>
           </View>
-          <RsvpButton isGoing={isGoing} isFull={isEventFull(event)} onPress={() => toggleRsvp(event.id)} />
+          <RsvpButton isGoing={isGoing} isPending={isRsvpPending} onPress={() => toggleRsvp(event.id)} />
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -181,8 +175,6 @@ const styles = StyleSheet.create({
   title: { marginTop: spacing.sm },
   section: { marginTop: spacing.xl },
   description: { marginTop: spacing.sm },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  tag: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
   back: { position: 'absolute', left: spacing.lg },
   bar: {
     paddingHorizontal: spacing.xl,

@@ -18,7 +18,7 @@ const ICON_SIZE = 18;
 
 export default function OfflineBanner({ savedAt, onRetry }: OfflineBannerProps) {
   const colors = useThemeColors();
-  const detail = savedAt ? ` · showing events saved ${formatRelativeTime(savedAt)}` : '';
+  const detail = savedAt ? ` · showing events saved ${formatRelativeTime(new Date(savedAt))}` : '';
 
   return (
     <Animated.View

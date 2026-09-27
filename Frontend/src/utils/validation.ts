@@ -58,21 +58,13 @@ export function validateLogin(values: LoginValues): FieldErrors<LoginValues> {
   };
 }
 
-export const MAX_HEADLINE_LENGTH = 80;
-
+/** Only the name is editable: the rules let users change name/avatarUrl, never email or role. */
 export interface ProfileValues {
   name: string;
-  headline: string;
 }
 
 export function validateProfile(values: ProfileValues): FieldErrors<ProfileValues> {
-  return {
-    name: nameError(values.name),
-    headline:
-      values.headline.trim().length > MAX_HEADLINE_LENGTH
-        ? `Headline must be under ${MAX_HEADLINE_LENGTH} characters.`
-        : undefined,
-  };
+  return { name: nameError(values.name) };
 }
 
 export function validateSignup(values: SignupValues): FieldErrors<SignupValues> {

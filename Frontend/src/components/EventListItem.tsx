@@ -6,7 +6,8 @@ import { CARD_PRESSED_SCALE } from '../theme/motion';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { CATEGORY_ICONS } from '../utils/categoryIcons';
-import { formatEventDate, formatEventTime } from '../utils/date';
+import { formatEventDate, formatEventDateTime } from '../utils/date';
+import { toJSDate } from '../utils/firestoreDates';
 import PressableScale from './PressableScale';
 
 type EventListItemProps = {
@@ -21,12 +22,13 @@ const CHEVRON_SIZE = 18;
 // Compact event row for secondary lists (e.g. "My RSVPs"); EventCard is the full-size version.
 export default function EventListItem({ event, onPress }: EventListItemProps) {
   const colors = useThemeColors();
+  const date = toJSDate(event.date);
 
   return (
     <PressableScale
       onPress={() => onPress(event)}
       pressedScale={CARD_PRESSED_SCALE}
-      accessibilityLabel={`${event.title}, ${formatEventDate(event.startsAt)}`}
+      accessibilityLabel={`${event.title}, ${formatEventDate(date)}`}
       style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
     >
       <View style={[styles.tile, { backgroundColor: colors.primaryTint }]}>
@@ -37,7 +39,7 @@ export default function EventListItem({ event, onPress }: EventListItemProps) {
           {event.title}
         </Text>
         <Text style={[typography.caption, { color: colors.textSecondary }]} numberOfLines={1}>
-          {formatEventDate(event.startsAt)} · {formatEventTime(event.startsAt)} · {event.location.venue}
+          {formatEventDateTime(date)} · {event.location}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={CHEVRON_SIZE} color={colors.textSecondary} />

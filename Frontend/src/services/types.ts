@@ -1,3 +1,8 @@
+import type { Timestamp } from 'firebase/firestore';
+
+// App-side shapes of the Firestore documents. Field names match the backend schema exactly
+// (Backend/src/types.ts); `id` is the document id, which lives in the path, not the document.
+
 export const EVENT_CATEGORIES = [
   'Hackathon',
   'Networking',
@@ -9,72 +14,51 @@ export const EVENT_CATEGORIES = [
 
 export type EventCategory = (typeof EVENT_CATEGORIES)[number];
 
+export type UserRole = 'attendee' | 'organizer' | 'admin';
+
+/** users/{userId} */
 export interface User {
   id: string;
   name: string;
   email: string;
-  headline: string;
-  interests: EventCategory[];
+  role: UserRole;
+  avatarUrl: string;
 }
 
-export interface Coordinates {
-  latitude: number;
-  longitude: number;
-}
+/** What the UI shows about other members. */
+export type PublicUser = Pick<User, 'id' | 'name' | 'avatarUrl'>;
 
-export interface EventLocation {
-  venue: string;
-  address: string;
-  /** Optional: the map is hidden for events without coordinates. */
-  coordinates?: Coordinates;
-}
-
+/** events/{eventId} */
 export interface EventItem {
   id: string;
   title: string;
   description: string;
+  date: Timestamp;
+  location: string;
   category: EventCategory;
-  startsAt: string; // ISO-8601
-  endsAt: string; // ISO-8601
-  location: EventLocation;
-  attendeeCount: number;
-  capacity: number;
   organizerId: string;
-  tags: string[];
+  attendeeCount: number;
+  commentCount: number;
+  imageUrl: string;
 }
 
+export type RsvpStatus = 'going' | 'not_going';
+
+/** Result of an RSVP toggle, as committed by the transaction. */
+export interface RsvpResult {
+  status: RsvpStatus;
+  attendeeCount: number;
+}
+
+/** events/{eventId}/comments/{commentId} */
 export interface EventComment {
   id: string;
-  eventId: string;
   userId: string;
-  body: string;
-  createdAt: string; // ISO-8601
+  text: string;
+  createdAt: Timestamp;
 }
 
-// ---- API contract: shapes the backend returns (the mock backend returns the same) ----
-
-/** Other members as the API exposes them: no email or private fields. */
-export type PublicUser = Pick<User, 'id' | 'name' | 'headline'>;
-
-/** Comments arrive with their author embedded so the UI never looks users up itself. */
+/** A comment with its author's profile resolved for display. */
 export interface CommentWithAuthor extends EventComment {
   author: PublicUser;
-}
-
-export interface AuthSession {
-  token: string;
-  user: User;
-}
-
-export interface RsvpStatus {
-  eventId: string;
-  isGoing: boolean;
-  attendeeCount: number;
-}
-
-/** Every backend response is wrapped in this envelope. */
-export interface ApiEnvelope<T> {
-  success: boolean;
-  data: T | null;
-  error: string | null;
 }

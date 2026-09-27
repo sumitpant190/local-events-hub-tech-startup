@@ -8,7 +8,7 @@ A mobile app for discovering local events. University group project, theme: **Te
 
 ## Tech stack
 
-React Native + Expo · React Navigation (native stack) · Zustand · Axios · react-native-reanimated + moti · Space Grotesk / Inter (via `@expo-google-fonts`)
+React Native + Expo · Firebase JS SDK (Auth + Firestore) · React Navigation (native stack) · Zustand · react-native-reanimated + moti · Space Grotesk / Inter (via `@expo-google-fonts`)
 
 ## Setup Guide
 
@@ -39,28 +39,32 @@ Then scan the QR code with Expo Go (Android) or the Camera app (iOS). Or press `
 
 > **Windows note:** the folder name contains `&`, which breaks `npx` and npm's `.bin` shims on Windows. The npm scripts call the Expo CLI through `node` directly, so use `npm start` instead of `npx expo start`. To add packages, run `node node_modules/expo/bin/cli install <pkg>`.
 
-### Mock data vs. real API
+### Firebase: emulators vs. production
 
-The app runs against an in-memory mock backend by default. To point it at a real server, copy `Frontend/.env.example` to `Frontend/.env`, set `EXPO_PUBLIC_USE_MOCK_DATA=false` and `EXPO_PUBLIC_API_URL`, then restart `npm start`. No screen or store changes are needed: every call goes through `src/services/*Service.ts`, which picks the mock or the Axios client (`src/services/api.ts`).
+The app talks to Firebase directly (Auth + Firestore, JS SDK). There is no custom server; `Backend/firestore.rules` is the access control. The client config lives in `Frontend/src/services/firebase.ts`. It's the public Web app config from **Firebase Console → Project settings → Your apps**, not a secret, so it's committed.
 
-API contract the backend must follow (every response is `{ success, data, error }`, authenticated calls send `Authorization: Bearer <token>`):
+| Build | Talks to |
+|---|---|
+| Dev (`npm start`), default | Local emulators, project `demo-local-events-hub` |
+| Dev with `EXPO_PUBLIC_USE_EMULATOR=false` in `Frontend/.env` | Real project `events-hub-techstartup` |
+| Release build | Always the real project (emulator code is `__DEV__`-only) |
 
-| Method | Path | Returns |
-|---|---|---|
-| POST | `/auth/login` `{ email, password }` | `{ token, user }` |
-| POST | `/auth/signup` `{ name, email, password }` | `{ token, user }` |
-| PATCH | `/users/me` `{ name, headline }` | `User` |
-| GET | `/users/:id` | `{ id, name, headline }` |
-| GET | `/events` | `EventItem[]` |
-| GET | `/me/rsvps` | `string[]` (event ids) |
-| PUT | `/events/:id/rsvp` `{ isGoing }` | `{ eventId, isGoing, attendeeCount }` |
-| GET | `/events/:id/attendees?limit=N` | `{ id, name, headline }[]` |
-| GET | `/events/:id/comments` | comments, newest first, each with `author` |
-| POST | `/events/:id/comments` `{ body }` | the created comment with `author` |
+**Run against the emulators (recommended for development):**
 
-A `401` from any authenticated call signs the user out; `401` from login/signup is shown as a normal error.
+1. In `Backend/`: `npm run emulators`, then in a second terminal `npm run seed:emulator`. Re-seed after every emulator restart, because the data is in memory.
+2. In `Frontend/`: `npm start`, then press `a` (Android emulator) or `i` (iOS simulator).
+3. Log in with a seeded account, e.g. `maya@loopdesk.io` / `startup123` (organizer). The Login screen shows this hint in dev.
 
-`EventItem.location.coordinates` (`{ latitude, longitude }`) is optional; EventDetails shows a map card only when it is present. Maps work in Expo Go as-is; a standalone Android release build additionally needs a Google Maps API key in `app.json` (`android.config.googleMaps.apiKey`).
+The emulator host is picked per platform: `10.0.2.2` on an Android emulator, `localhost` on an iOS simulator or web. **On a physical phone** (Expo Go on the same Wi-Fi), set `EXPO_PUBLIC_EMULATOR_HOST=<your computer's LAN IP>` in `Frontend/.env` and restart `npm start`. See `Frontend/.env.example`.
+
+**How the app uses Firebase:**
+- **Auth:** email/password through Firebase Auth. Sessions persist across restarts (AsyncStorage). Signup creates `users/{uid}` with `role: "attendee"` (see "Signup contract" below).
+- **Events:** read from `events`, ordered by `date`. Opening an event refreshes it.
+- **RSVP:** one client-side transaction writes the RSVP and moves `attendeeCount` by ±1. The button disables while it's in flight.
+- **Comments:** a live `onSnapshot` listener while an event is open, removed when you leave. Posting runs a transaction that also increments `commentCount`.
+- **Dates:** Firestore dates arrive as `Timestamp`s and are converted with `toJSDate()` (`src/utils/firestoreDates.ts`) before formatting.
+
+**Venue map:** events store the venue as text only, so EventDetails geocodes it on the device (`expo-location`). On Android that needs the location permission, so the card shows **Show on map** and asks first. If you deny it, or the address can't be found, it offers **Open in Maps**, which searches the address in your maps app. Maps work in Expo Go as-is; a standalone Android release build also needs a Google Maps API key in `app.json` (`android.config.googleMaps.apiKey`).
 
 The events list is cached on the device (AsyncStorage, public event data only). If a refresh fails, the app keeps showing the cached list with an "offline" banner and a Retry button; pull down to refresh.
 
@@ -74,7 +78,7 @@ Frontend/
     components/        reusable UI pieces
     navigation/        React Navigation stacks
     store/             Zustand stores
-    services/          API layer (Axios)
+    services/          Firebase init + one service per collection (auth, events, rsvp, comments, users)
     theme/             colors, typography, spacing (single source of truth)
     assets/            images, icons
     utils/             helpers

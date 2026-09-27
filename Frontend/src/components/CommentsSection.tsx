@@ -1,5 +1,4 @@
 import { MotiText } from 'moti';
-import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import type { CommentWithAuthor } from '../services/types';
@@ -26,13 +25,9 @@ export default function CommentsSection({ eventId }: CommentsSectionProps) {
   const comments = useCommentsStore((state) => state.commentsByEvent[eventId]) ?? NO_COMMENTS;
   const isPosting = useCommentsStore((state) => state.postingEventId === eventId);
   const loadError = useCommentsStore((state) => state.loadErrorByEvent[eventId] ?? null);
-  const loadComments = useCommentsStore((state) => state.loadComments);
   const addComment = useCommentsStore((state) => state.addComment);
   const currentUser = useAuthStore((state) => state.currentUser);
-
-  useEffect(() => {
-    loadComments(eventId);
-  }, [eventId, loadComments]);
+  // The live listener is owned by EventDetailsScreen (subscribed on mount, unsubscribed on unmount).
 
   const handleSubmit = (text: string) =>
     currentUser

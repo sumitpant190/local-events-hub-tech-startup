@@ -32,7 +32,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const rsvpEventIds = useEventsStore((state) => state.rsvpEventIds);
   const [isEditing, setIsEditing] = useState(false);
 
-  // events is already sorted by start date, so this keeps RSVPs in chronological order.
+  // events is already ordered by `date` (Firestore orderBy), so this keeps RSVPs in chronological order.
   const myEvents = useMemo(() => events.filter((event) => rsvpEventIds.includes(event.id)), [events, rsvpEventIds]);
 
   // initial: false keeps EventsList underneath, so back from details lands on the list.
@@ -60,8 +60,13 @@ export default function ProfileScreen({ navigation }: Props) {
           </MotiView>
           <Text style={[typography.h1, styles.centered, { color: colors.textPrimary }]}>{currentUser.name}</Text>
           <Text style={[typography.body, { color: colors.textSecondary }]}>{currentUser.email}</Text>
-          {currentUser.headline ? (
-            <Text style={[typography.label, styles.headline, { color: colors.accentText }]}>{currentUser.headline}</Text>
+          {/* Role comes from users/{uid}.role; attendees (the default) get no badge. */}
+          {currentUser.role !== 'attendee' ? (
+            <View style={[styles.roleBadge, { backgroundColor: colors.primaryTint }]}>
+              <Text style={[typography.label, { color: colors.primary }]}>
+                {currentUser.role === 'admin' ? 'Admin' : 'Organizer'}
+              </Text>
+            </View>
           ) : null}
           <AppButton label="Edit profile" variant="ghost" onPress={() => setIsEditing(true)} />
         </FadeInUp>
@@ -110,7 +115,12 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center' },
   avatarRing: { padding: spacing.xs, borderRadius: radius.pill, borderWidth: 2, marginBottom: spacing.lg },
   centered: { textAlign: 'center' },
-  headline: { marginTop: spacing.xs },
+  roleBadge: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+  },
   section: { marginTop: spacing.xxl },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   count: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs, borderRadius: radius.pill },

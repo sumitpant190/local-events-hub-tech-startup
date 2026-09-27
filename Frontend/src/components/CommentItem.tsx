@@ -4,6 +4,7 @@ import { useThemeColors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import { formatRelativeTime } from '../utils/date';
+import { toJSDate } from '../utils/firestoreDates';
 import Avatar from './Avatar';
 
 type CommentItemProps = {
@@ -26,10 +27,10 @@ export default function CommentItem({ comment, authorName, isOwn }: CommentItemP
             {isOwn ? 'You' : authorName}
           </Text>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>
-            · {formatRelativeTime(comment.createdAt)}
+            · {formatRelativeTime(toJSDate(comment.createdAt))}
           </Text>
         </View>
-        <Text style={[typography.body, { color: colors.textSecondary }]}>{comment.body}</Text>
+        <Text style={[typography.body, { color: colors.textSecondary }]}>{comment.text}</Text>
       </View>
     </View>
   );

@@ -606,3 +606,61 @@
 - **Accepted, not changed:** any signed-in user can read every `users` profile, including email. The app shows organiser names and avatars and needs those reads. Splitting emails into a private sub-document would change the Phase 2 schema. Low risk for a campus events app; revisit if the audience widens.
 - **Accepted (from Phase 6):** a tampered client can move `commentCount` by ±1 without commenting. It's display-only, and closing it needs Blaze.
 - **Blaze check:** audit reads plus one password rotation through the Auth REST API; nothing needs Blaze.
+
+## Integration Phase — Frontend/Backend Wiring
+**Date:** 2026-09-27
+**Summary:** The React Native app now talks to Firebase directly (Auth + Firestore, JS SDK v12 modular), and the mock backend, Axios client and JWT session code are gone. Auth uses an `onAuthStateChanged` listener with AsyncStorage persistence, and signup follows the backend signup contract (`role: "attendee"` hardcoded). Events are read from Firestore. RSVP and comment posting are client-side transactions that move `attendeeCount`/`commentCount` atomically. Comments stream live through `onSnapshot`. Emulators are used in `__DEV__` builds (host per platform), and release builds always use production. No backend code changed.
+**Files added/changed:**
+- Frontend/src/services/firebase.ts — new:
+  - app init with the public Web config;
+  - `initializeAuth` with React Native persistence;
+  - emulator wiring gated on `__DEV__` and `EXPO_PUBLIC_USE_EMULATOR`; host is `10.0.2.2` on Android, `localhost` on iOS/web, or `EXPO_PUBLIC_EMULATOR_HOST` for a physical phone.
+- Frontend/src/utils/firestoreDates.ts — new: `toJSDate()` Timestamp → Date, used everywhere a date is formatted.
+- Frontend/src/services/errors.ts — new: Firebase error codes mapped to user-safe messages (replaces `ApiError`).
+- Frontend/src/services/types.ts — the domain types now match the Firestore schema exactly (`date: Timestamp`, `location: string`, `commentCount`, `imageUrl`, `role`, `avatarUrl`, comment `text`).
+- Frontend/src/services/authService.ts — `login` / `signup` (creates `users/{uid}`, deletes the Auth user if that write fails) / `logout` / `subscribeToAuth` / `currentUid`.
+- Frontend/src/services/eventsService.ts — `getEvents()` (`orderBy('date')`), `getEventById()`.
+- Frontend/src/services/rsvpService.ts — `toggleRsvp()` as a `runTransaction` (reads the event and the caller's RSVP, writes the RSVP and `increment(±1)`); `listMyRsvpEventIds()`; `listAttendees()`.
+- Frontend/src/services/commentsService.ts — `subscribeToComments()` (`onSnapshot`, `orderBy('createdAt','desc')`, authors resolved); `addComment()` transaction (comment + `commentCount` +1).
+- Frontend/src/services/usersService.ts — `getProfile`, cached `getUser`, `updateMyName`.
+- Frontend/src/services/eventsCache.ts — the offline cache stores `date` as epoch ms and rebuilds the Timestamp on read (key bumped to v2).
+- Frontend/src/store/authStore.ts — the JWT session is replaced by the auth listener, with `isAuthReady` gating the splash so a restored session never flashes Login; the role is stored from `users/{uid}`; profile editing is name-only.
+- Frontend/src/store/eventsStore.ts:
+  - an optimistic RSVP is reconciled with the committed `{status, attendeeCount}`;
+  - `refreshEvent()` re-reads the open event on open and after a failed RSVP;
+  - one shared in-flight `loadEvents`.
+- Frontend/src/store/commentsStore.ts — `subscribe(eventId)` returns the unsubscribe; posting relies on the listener instead of a local insert.
+- Frontend/src/screens/EventDetailsScreen.tsx — owns the comments listener (`useEffect(() => subscribe(eventId))`, so React unsubscribes on unmount); single date; no capacity bar or tags; the RSVP button disables while in flight.
+- Frontend/src/components/EventMap.tsx — geocodes the `location` string with `expo-location`: a **Show on map** button asks for permission first, and if it's denied or the address isn't found it falls back to **Open in Maps** (address search).
+- Frontend/src/components/{EventCard,EventListItem,CommentItem,CommentsSection,OrganizerCard,RsvpButton,EditProfileForm,OfflineBanner,AppShell}.tsx, Frontend/src/screens/ProfileScreen.tsx — dates through `toJSDate`, `location` as a string, comment `text`, role badge instead of the headline, `isPending` instead of `isFull`.
+- Frontend/src/utils/{date,rsvp,validation}.ts — formatters take `Date`; capacity helpers removed; the profile is name-only.
+- Deleted: Frontend/src/services/{api,config,mockApi}.ts, Frontend/src/services/mockData/ (4 files), Frontend/src/components/CapacityBar.tsx.
+- Frontend/package.json — +`firebase`, +`expo-location`, −`axios`; +`eslint`/`eslint-config-expo` and a working `lint` script (ESLint called directly: the `&` in the path breaks `.bin` shims). Frontend/eslint.config.js — new (Expo flat config).
+- Frontend/tsconfig.json — `paths` maps `@firebase/auth` to its React Native typings (the runtime build that exports `getReactNativePersistence`).
+- Frontend/app.json — `expo-location` plugin with the permission text. Frontend/.env.example — `EXPO_PUBLIC_USE_EMULATOR` / `EXPO_PUBLIC_EMULATOR_HOST` replace the mock/API variables.
+- README.md — the mock/API-contract section is replaced by "Firebase: emulators vs. production"; tech stack and structure updated.
+**Commit:** `feat(integration): wire frontend to Firebase, remove mock data layer and axios/JWT flow`
+**Verified:** Run in Expo Go on an Android emulator (Pixel, SDK 57) against the seeded Firebase emulators, driven over adb, with Firestore state read independently after each step.
+1. **Signup:** "Test Signup" signed straight in. Firestore has `users/7A71VdPL…` = `{name: "Test Signup", email: "newuser@test.dev", role: "attendee", avatarUrl: ""}`, exactly the 4 schema fields.
+2. **Organizer login:** `maya@loopdesk.io` shows the **Organizer** badge on Profile (role read from `users/usr-01`), and her seeded RSVP is listed under My RSVPs.
+3. **Browse, search, filter:** "12 of 12 upcoming events", soonest first (Oct 3 → 9 → 15), dates rendered from Timestamps. Networking → 2; Networking + "mixer" → 1. No UI changes were needed for search or filter.
+4. **RSVP:** on `evt-01`, `attendeeCount` 2 → **3** and the RSVP became `going` (server `updatedAt`); un-RSVP gave 3 → **2** and `not_going`. The UI matched each committed result ("3 attending", "You + 2 others going", and back).
+5. **Comments:**
+   - Posting in the app showed "You · just now" and `commentCount` 2 → **3** in Firestore.
+   - A second session (Priya, her own ID token, a rules-checked commit) posted while the app sat untouched: her comment appeared live ("just now", count 4) with no refresh, and `commentCount` = **4**.
+6. **Session persistence:** after `am force-stop` of Expo Go (process confirmed gone) and a relaunch, the app was still signed in as Maya, not on Login. This was repeated after a later cold start.
+7. **Blocked action:** the UI offers no edits to others' comments, so a real rules rejection was triggered instead.
+   - Setup: `evt-07.attendeeCount` was set to 0 while Maya's RSVP stayed `going`, and Maya then cancelled her RSVP.
+   - The rules refused the commit (SDK log: `Commit … failed with error: permission-denied`, since the count would go below 0). Firestore was unchanged.
+   - The app rolled back its optimistic change and showed the banner "You don't have permission to do that.", with no crash (process alive).
+   - After the fix below, the screen also resynced to the server count (0).
+   - The test data was restored afterwards (`evt-07.attendeeCount` = 2).
+- `tsc --noEmit`: clean. ESLint on every file this phase touched: clean.
+**Notes/decisions:**
+- **The mock types didn't match the schema.** The prompt assumed a plain data-source swap, but the mock model had `startsAt`/`endsAt`, a structured `location` with coordinates, `capacity`, `tags`, and a user `headline`/`interests`, none of which exist in Firestore. The UI was adapted (with the user's agreement) instead of extending the schema, which is frozen and whose rules reject extra fields: start time only, capacity bar and tags removed, profile edit name-only, role badge added.
+- **Venue map:** Android geocoding needs the location permission, so the map is opt-in ("Show on map") rather than automatic, with a no-permission "Open in Maps" fallback (verified: it opens Google Maps searching the venue text). The seed addresses are fictional, so pins land on look-alike venues.
+- **Bug found during verification and fixed:** opening an event before the list had loaded (a restored screen) discarded the fresh Firestore copy, and a refused RSVP left a stale count on screen. `refreshEvent()`, keyed on the open event id, fixes both; re-verified on the device.
+- **My RSVPs** needs one `rsvps/{uid}` read per event: RSVP docs carry no uid field and the rules have no collection-group match (backend frozen). Fine at this size; revisit if events grow into the hundreds.
+- **Comment listener cleanup** is enforced structurally (the subscribe return value is the `useEffect` cleanup in EventDetailsScreen). Its unsubscribe firing wasn't observed at runtime, because there's no listener introspection on the emulator.
+- **Lint debt left as-is (predates this phase):** 3 errors and 1 warning in files this phase didn't change (`AnimatedMessage`, `BottomSheetModal`: setState in an effect; `OfflineBanner:32`: an unescaped `'`; `navigation/types.ts`: an empty interface). ESLint had never been installed, so these had never been reported.
+- **Dev-only noise:** LogBox shows the Firebase SDK's warning log when the rules refuse a commit, and an existing `SafeAreaView` deprecation warning comes from a dependency. Neither appears in release builds.

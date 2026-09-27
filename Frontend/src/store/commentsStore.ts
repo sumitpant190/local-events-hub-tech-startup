@@ -1,19 +1,20 @@
 import { create } from 'zustand';
-import { getErrorMessage } from '../services/api';
+import { currentUid } from '../services/authService';
 import * as commentsService from '../services/commentsService';
+import { getErrorMessage } from '../services/errors';
 import type { CommentWithAuthor } from '../services/types';
 import { sanitizeComment } from '../utils/sanitize';
 
 export type CommentResult = { ok: true } | { ok: false; error: string };
 
 interface CommentsState {
-  /** Newest first, keyed by event id. Absent until loadComments succeeds for that event. */
+  /** Newest first, keyed by event id. Kept live by the Firestore listener while the event is open. */
   commentsByEvent: Record<string, CommentWithAuthor[]>;
   loadErrorByEvent: Record<string, string>;
   postingEventId: string | null;
-  loadComments: (eventId: string) => Promise<void>;
-  /** The server sets the author from the session token, so none is passed here. */
-  addComment: (eventId: string, rawBody: string) => Promise<CommentResult>;
+  /** Starts the live listener for an event. Returns the unsubscribe: call it on unmount. */
+  subscribe: (eventId: string) => () => void;
+  addComment: (eventId: string, rawText: string) => Promise<CommentResult>;
 }
 
 export const useCommentsStore = create<CommentsState>()((set, get) => ({
@@ -21,36 +22,32 @@ export const useCommentsStore = create<CommentsState>()((set, get) => ({
   loadErrorByEvent: {},
   postingEventId: null,
 
-  loadComments: async (eventId) => {
-    if (get().commentsByEvent[eventId]) return;
-    try {
-      const comments = await commentsService.listComments(eventId);
-      set((state) => {
-        const { [eventId]: _cleared, ...otherErrors } = state.loadErrorByEvent;
-        return { commentsByEvent: { ...state.commentsByEvent, [eventId]: comments }, loadErrorByEvent: otherErrors };
-      });
-    } catch (error) {
-      set((state) => ({
-        loadErrorByEvent: { ...state.loadErrorByEvent, [eventId]: getErrorMessage(error, "Couldn't load comments.") },
-      }));
-    }
-  },
+  subscribe: (eventId) =>
+    commentsService.subscribeToComments(
+      eventId,
+      (comments) =>
+        set((state) => {
+          const { [eventId]: _cleared, ...otherErrors } = state.loadErrorByEvent;
+          return { commentsByEvent: { ...state.commentsByEvent, [eventId]: comments }, loadErrorByEvent: otherErrors };
+        }),
+      (error) =>
+        set((state) => ({
+          loadErrorByEvent: { ...state.loadErrorByEvent, [eventId]: getErrorMessage(error, "Couldn't load comments.") },
+        })),
+    ),
 
-  addComment: async (eventId, rawBody) => {
+  addComment: async (eventId, rawText) => {
     if (get().postingEventId === eventId) return { ok: false, error: 'Still posting your last comment.' };
-    // Sanitized here for instant feedback; the server sanitizes again and is the real authority.
-    const body = sanitizeComment(rawBody);
-    if (!body) return { ok: false, error: "Comment can't be empty." };
+    const uid = currentUid();
+    if (!uid) return { ok: false, error: 'Log in to comment.' };
+    // Sanitized for instant feedback; the rules independently enforce non-blank text under 500 characters.
+    const text = sanitizeComment(rawText);
+    if (!text) return { ok: false, error: "Comment can't be empty." };
 
     set({ postingEventId: eventId });
     try {
-      const comment = await commentsService.createComment(eventId, body);
-      set((state) => ({
-        commentsByEvent: {
-          ...state.commentsByEvent,
-          [eventId]: [comment, ...(state.commentsByEvent[eventId] ?? [])],
-        },
-      }));
+      // No local insert: the listener delivers the new comment as soon as the transaction commits.
+      await commentsService.addComment(eventId, uid, text);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: getErrorMessage(error, "Couldn't post your comment. Please try again.") };

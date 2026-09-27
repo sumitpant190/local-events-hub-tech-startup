@@ -11,7 +11,8 @@ import PressableScale from './PressableScale';
 
 type RsvpButtonProps = {
   isGoing: boolean;
-  isFull: boolean;
+  /** An RSVP transaction is in flight: ignore taps until it settles (a second tap would race it). */
+  isPending: boolean;
   onPress: () => void;
 };
 
@@ -20,11 +21,10 @@ const POP_SPRING = { damping: 9, stiffness: 320 };
 const COLOR_MS = 260;
 const ICON_SIZE = 20;
 
-export default function RsvpButton({ isGoing, isFull, onPress }: RsvpButtonProps) {
+export default function RsvpButton({ isGoing, isPending, onPress }: RsvpButtonProps) {
   const colors = useThemeColors();
   const scale = useSharedValue(1);
   const previousIsGoing = useRef(isGoing);
-  const isDisabled = isFull && !isGoing;
 
   // Pop only when the RSVP state actually flips, not on first render.
   useEffect(() => {
@@ -35,16 +35,16 @@ export default function RsvpButton({ isGoing, isFull, onPress }: RsvpButtonProps
 
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  const label = isGoing ? "You're going" : isFull ? 'Event full' : 'RSVP';
+  const label = isGoing ? "You're going" : 'RSVP';
   const contentColor = isGoing ? colors.onPrimary : colors.textPrimary;
 
   return (
     <Animated.View style={popStyle}>
       <PressableScale
         onPress={onPress}
-        disabled={isDisabled}
+        disabled={isPending}
         accessibilityLabel={isGoing ? 'Cancel RSVP' : 'RSVP to this event'}
-        accessibilityState={{ selected: isGoing }}
+        accessibilityState={{ selected: isGoing, busy: isPending }}
       >
         <MotiView
           animate={{
@@ -62,7 +62,7 @@ export default function RsvpButton({ isGoing, isFull, onPress }: RsvpButtonProps
             transition={springs.press}
           >
             <Ionicons
-              name={isGoing ? 'checkmark-circle' : isFull ? 'close-circle-outline' : 'add-circle-outline'}
+              name={isGoing ? 'checkmark-circle' : 'add-circle-outline'}
               size={ICON_SIZE}
               color={contentColor}
             />

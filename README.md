@@ -134,6 +134,7 @@ It needs no service account key.
 2. **Build → Firestore Database → Create database**, and choose **production mode** (deny all), not test mode.
 3. **Build → Authentication → Sign-in method**, and enable **Email/Password**.
 4. Link it locally: `npm run firebase -- login`, then `npm run firebase -- use --add` and pick the project.
+5. Deploy the rules and indexes: `npm run firebase -- deploy --only firestore:rules,firestore:indexes --project events-hub-techstartup`. Until you do, the database keeps the Console's deny-all default. Re-run it whenever `firestore.rules` changes.
 
 ### Secrets: what's safe to commit
 
@@ -272,7 +273,19 @@ A document path is `{base}/projects/{PROJECT_ID}/databases/(default)/documents/{
 
    Expected result: 9 requests, 14 assertions, 0 failed.
 
-For the real project, change the collection variables `firestoreBase`, `authBase`, `projectId`, `apiKey`, `email`/`password`, `eventId` and `otherUserId` (the collection description lists the values).
+**Against the real project**, override the variables on the command line (or edit them in Postman). The committed file keeps pointing at the emulators.
+
+```powershell
+npx -y newman@6 run postman_collection.json `
+  --env-var "firestoreBase=https://firestore.googleapis.com/v1" `
+  --env-var "authBase=https://identitytoolkit.googleapis.com/v1" `
+  --env-var "projectId=events-hub-techstartup" `
+  --env-var "apiKey=<Web API key>" `
+  --env-var "email=<an attendee account>" --env-var "password=<its password>" `
+  --env-var "eventId=<an existing event id>" --env-var "otherUserId=<another user's uid>"
+```
+
+The signed-in account must be an `attendee` (the tests check that its role stays `attendee`), and `otherUserId` must be a different user. Verified on `events-hub-techstartup` (2026-09-27): 9 requests, 14 assertions, 0 failed.
 
 ### Getting an ID token
 
@@ -373,7 +386,7 @@ Authorization: Bearer {idToken}
 
 These are in the collection's **2. Rejected by security rules** folder. They show that the database refuses requests the rules don't allow, even though anyone can reach the URL.
 
-| Request | Why it's refused | Emulator (verified) | Production (expected, not verified here) |
+| Request | Why it's refused | Emulator | Production |
 |---|---|---|---|
 | `GET …/events/evt-01` with **no** `Authorization` header | every read requires `request.auth != null` | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
 | `GET …/events/evt-01` with `Bearer not-a-real-token` | the token isn't a valid Firebase ID token | `400 INVALID_ARGUMENT` ("invalid jwt") | `401 UNAUTHENTICATED` |
@@ -394,7 +407,13 @@ Content-Type: application/json
 { "error": { "code": 403, "message": "\nfalse for 'create' @ L81, … false for 'update' @ L88, …", "status": "PERMISSION_DENIED" } }
 ```
 
-That `message` is the emulator's rule trace, which helps with debugging. Production is expected to return the generic `Missing or insufficient permissions.` instead, with the same `status`, so the rule details don't leak.
+That `message` is the emulator's rule trace, which helps with debugging. Production returns the generic message instead, with the same `status`, so no rule details leak:
+
+```json
+{ "error": { "code": 403, "message": "Missing or insufficient permissions.", "status": "PERMISSION_DENIED" } }
+```
+
+Both columns of the table above were verified by running the collection on the emulators and on `events-hub-techstartup`. On production an attendee creating an event was also refused (403), and an organizer creating one was allowed (200).
 
 The full allowed/denied matrix (82 cases, SDK-based) is in `Backend/tests/` (`npm run test:emulator`).
 

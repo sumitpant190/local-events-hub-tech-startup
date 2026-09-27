@@ -2,7 +2,7 @@
   "info": {
     "name": "Local Events Hub — Firestore REST API",
     "_postman_id": "5b0c7f0e-7d4a-4f5e-9a57-2f1c1d0e7a01",
-    "description": "There is no custom server. These requests call Firestore's native REST interface (`/v1/projects/{projectId}/databases/(default)/documents/{path}`), authenticated with a Firebase ID token (`Authorization: Bearer <idToken>`). Every request is checked by `Backend/firestore.rules`, so the rejected requests prove the rules are the access-control layer.\n\n**Default target: the local emulators** (`npm run emulators` then `npm run seed:emulator`). Run the folders in order: `0. Auth` stores `idToken` and `uid` for the rest.\n\n**Against the real project**, change the collection variables:\n- `firestoreBase` → `https://firestore.googleapis.com/v1`\n- `authBase` → `https://identitytoolkit.googleapis.com/v1`\n- `projectId` → your Firebase project id\n- `apiKey` → the Web API key from Project Settings\n- `email` / `password` → an account that exists in that project\n- `eventId` / `otherUserId` → document ids that exist there\n\nVerified on the emulators only. On production an invalid token is expected to return `401 UNAUTHENTICATED` and a rules denial returns `403 PERMISSION_DENIED` with `Missing or insufficient permissions.`; the emulator returns `400 INVALID_ARGUMENT` for a malformed token and a rule trace in the 403 message.",
+    "description": "There is no custom server. These requests call Firestore's native REST interface (`/v1/projects/{projectId}/databases/(default)/documents/{path}`), authenticated with a Firebase ID token (`Authorization: Bearer <idToken>`). Every request is checked by `Backend/firestore.rules`, so the rejected requests prove the rules are the access-control layer.\n\n**Default target: the local emulators** (`npm run emulators` then `npm run seed:emulator`). Run the folders in order: `0. Auth` stores `idToken` and `uid` for the rest.\n\n**Against the real project**, change the collection variables:\n- `firestoreBase` → `https://firestore.googleapis.com/v1`\n- `authBase` → `https://identitytoolkit.googleapis.com/v1`\n- `projectId` → your Firebase project id\n- `apiKey` → the Web API key from Project Settings\n- `email` / `password` → an attendee account that exists in that project\n- `eventId` / `otherUserId` → document ids that exist there\n\nVerified on both. On production an invalid token returns `401 UNAUTHENTICATED` and a rules denial returns `403 PERMISSION_DENIED` with `Missing or insufficient permissions.`; the emulator returns `400 INVALID_ARGUMENT` for a malformed token and a rule trace in the 403 message.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -68,7 +68,7 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('is the requested event document', () => {",
-                  "  pm.expect(body.name).to.match(new RegExp('/documents/events/' + pm.collectionVariables.get('eventId') + '$'));",
+                  "  pm.expect(body.name).to.match(new RegExp('/documents/events/' + pm.variables.get('eventId') + '$'));",
                   "  pm.expect(body.fields.title.stringValue).to.be.a('string').and.not.empty;",
                   "  pm.expect(body.fields.attendeeCount).to.have.property('integerValue');",
                   "});"
@@ -120,8 +120,8 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('is the signed-in user\\'s profile', () => {",
-                  "  pm.expect(body.name).to.match(new RegExp('/documents/users/' + pm.collectionVariables.get('uid') + '$'));",
-                  "  pm.expect(body.fields.email.stringValue).to.eql(pm.collectionVariables.get('email'));",
+                  "  pm.expect(body.name).to.match(new RegExp('/documents/users/' + pm.variables.get('uid') + '$'));",
+                  "  pm.expect(body.fields.email.stringValue).to.eql(pm.variables.get('email'));",
                   "  pm.expect(body.fields.role.stringValue).to.eql('attendee');",
                   "});"
                 ]

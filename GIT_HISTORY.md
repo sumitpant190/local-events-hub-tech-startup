@@ -532,7 +532,26 @@
 - `npx -y newman@6 run postman_collection.json` against freshly seeded emulators: **9 requests, 14 assertions, 0 failed**, twice in a row (nothing in the collection writes data, so re-runs are stable).
 - Example responses in the README were captured from the same emulator run.
 **Notes/decisions:**
-- **Emulator vs production differences:** a malformed token returns `400 INVALID_ARGUMENT` on the emulator; production is expected to return `401 UNAUTHENTICATED`, so that test accepts either. The emulator's 403 `message` is a rule trace; production is expected to return the generic "Missing or insufficient permissions.". The production behaviour is from Firebase's docs and wasn't run here (no real project data yet); the README labels it "expected".
+- **Emulator vs production differences:** a malformed token returns `400 INVALID_ARGUMENT` on the emulator but `401 UNAUTHENTICATED` on production, so that test accepts either. The emulator's 403 `message` is a rule trace; production returns the generic "Missing or insufficient permissions.". Both were verified in the production run below.
+
+### Phase 7 follow-up — verified on the real project
+**Date:** 2026-09-27
+**Summary:** Created the Firestore `(default)` database (`nam5`, production mode) and enabled Email/Password in the Console. Deployed `firestore.rules` and `firestore.indexes.json` to `events-hub-techstartup`, then ran the same collection against production.
+**Files changed:**
+- Backend/postman_collection.json — test scripts read variables with `pm.variables.get` instead of `pm.collectionVariables.get`. The first production run exposed this: the old calls ignored `--env-var` overrides and compared against the emulator defaults, which failed 2 assertions even though the responses were correct.
+- README.md — production run command for newman; the production column of the rejected-requests table is now verified; real production 403 body; deploy step added to "Link the real Firebase project".
+**Commit:** `test(api): verify Postman collection against production Firestore`
+**Verified on `events-hub-techstartup`:**
+- Test data (created through the REST API, not the Admin SDK, so the rules checked every write):
+  - 2 test accounts, whose `users/{uid}` profiles were created per the signup contract (200);
+  - an attendee creating an event was refused (403), and so was an attendee promoting itself (403);
+  - after one account was promoted to `organizer` in the Console, it created an event (200).
+- newman against production, signed in as the attendee: **9 requests, 14 assertions, 0 failed**. Production returns 401 for an invalid token and 403 `Missing or insufficient permissions.` for rule denials.
+- newman against the seeded emulators after the script change: 9 requests, 14 assertions, 0 failed.
+**Notes/decisions:**
+- **Role typo caught by the rules:** the first Console promotion saved `role: "tester"`, and event creation was correctly refused until it was corrected to `organizer`. Roles edited by hand aren't validated by the rules (Console edits bypass them), so they must be typed exactly.
+- **Test accounts are kept as demo data** (`tester1@…` organizer, `tester2@…` attendee, plus one Networking event). Their password isn't committed.
+- **Blaze check:** rules and index deploy plus REST calls; nothing needs Blaze.
 - **Credentials in the collection:** only the seeded emulator demo account (already documented in the README). `idToken` starts empty and is filled at run time; no service account or real token is committed.
 - **newman isn't a devDependency:** it's run on demand with `npx`, which keeps the backend install unchanged.
 - **APA publish years** come from the npm registry publish date of each installed version. Firebase documentation pages have no publication date, so they are cited as "n.d." with a retrieval date.

@@ -1,283 +1,422 @@
 # Local Events Hub
 
-A mobile app for discovering local events. University group project, theme: **Tech & Startup**.
+**Theme: Tech & Startup.** A mobile app where founders, developers and students discover local hackathons, meetups and tech events, RSVP to them, and discuss them in real time.
 
-- `Frontend/` — React Native app (Expo managed workflow, TypeScript)
-- `Backend/` — Firebase on the free Spark plan: Firestore security rules, emulator config, seed scripts, rules tests, Postman collection
-- `GIT_HISTORY.md` — phase-by-phase development log
+| | |
+|---|---|
+| `Frontend/` | React Native app (Expo SDK 57, TypeScript) |
+| `Backend/` | Firebase on the free Spark plan: Firestore Security Rules, emulator config, seed scripts, rules tests, Postman collection |
+| `GIT_HISTORY.md` | Phase-by-phase development log: what was built, why, and how each phase was verified |
 
-## Tech stack
+---
 
-React Native + Expo · Firebase JS SDK (Auth + Firestore) · React Navigation (native stack) · Zustand · react-native-reanimated + moti · Space Grotesk / Inter (via `@expo-google-fonts`)
+## 1. Title & One-Line Description
 
-## Setup Guide
+**Local Events Hub (Tech & Startup edition):** a cross-platform mobile app for discovering, RSVPing to and discussing local tech and startup events: hackathons, networking nights, workshops, pitch nights, demo days and panels.
 
-### Prerequisites
+---
 
-- Node.js 20 or newer
-- Git
-- The **Expo Go** app on your phone, or an Android emulator / iOS simulator
+## 2. Project Goal
 
-### Install and run
+<!-- TODO: compare this framing with the "Project Goal" section of the assignment brief (the brief is not in the repo) and adjust the wording if needed. -->
+
+We approached this project as a small startup team building a real product: a **Local Events Hub** for one community, designed from day one to be **scalable, secure and specific to its theme**. The goal was a platform where a local community can find out what is happening near them, commit to attending, and talk about it, with an architecture that could grow beyond a class demo.
+
+In practice that meant:
+- a managed, horizontally scaling backend (Cloud Firestore + Firebase Authentication) instead of a single self-hosted server;
+- an access-control model enforced on the server side by Firestore Security Rules, not by trusting the app;
+- data-integrity guarantees (atomic transactions for shared counters) that hold even when many people act at the same moment;
+- a UI and dataset built specifically around one audience: the local tech and startup scene.
+
+---
+
+## 3. Theme Rationale
+
+**Theme: Tech & Startup — Hackathons, meetups, tech events.**
+
+We chose this theme because it's the community our team is part of. University tech students, early-stage founders and developers rely on local events (hackathons, founder meetups, demo days) to find collaborators, co-founders and jobs, but those events are scattered across many channels. The theme runs through the whole app:
+
+- **Event categories.** Every event belongs to one of six categories, defined in `Frontend/src/services/types.ts` and enforced by `Backend/firestore.rules`: **Hackathon, Networking, Workshop, Demo Day, Panel, Pitch Night**. Each has its own icon and a filter chip on the Discover screen.
+- **Sample data.** The seed script (`Backend/scripts/seedData.ts`) creates 12 realistic local events, 2 per category, for example "Build Weekend: 48h AI Hackathon", "Founders & Coffee", "Tech Mixer: Devs × Designers" and "SaaS Demo Day & Year-end Mixer". It also adds 4 personas (organizers from a co-working space and a builder club, a student, and a startup engineer) plus RSVPs and comments that read like a real community.
+- **Colour palette** (`Frontend/src/theme/colors.ts`). The palette is deliberately "developer tool / startup": a near-black canvas like a code editor in dark mode, with an electric violet primary and a cyan accent.
+
+  | Token | Hex | Use |
+  |---|---|---|
+  | Primary | `#6C5CE7` | Buttons, active states, highlights (both modes) |
+  | Accent | `#22D3EE` | Secondary highlights, glows |
+  | Ink (dark background / light text) | `#0B0E14` | Dark-mode canvas, light-mode text |
+  | Paper (light background / dark text) | `#F5F6FA` | Light-mode canvas, dark-mode text |
+  | Surface (dark / light) | `#151925` / `#FFFFFF` | Cards |
+  | Success | `#3DDC97` | Positive states |
+  | Error | `#FF6B6B` | Errors (darkened to `#C53030` for text in light mode) |
+
+  Light mode is designed as its own palette rather than a simple inversion. Its colour roles were checked against WCAG contrast (see `GIT_HISTORY.md`, frontend Phase 10).
+- **Typography** (`Frontend/src/theme/typography.ts`). **Space Grotesk** (500/600/700) for headings, a geometric grotesque with a technical feel, and **Inter** (400/500/600) for body text, chosen for legibility on small screens. Both are loaded through `@expo-google-fonts`.
+
+---
+
+## 4. Core Features
+
+The five core features, as built (see `GIT_HISTORY.md` for each phase):
+
+1. **Login / signup (authentication).**
+   - Email and password go through **Firebase Authentication**; the app never stores passwords.
+   - Signup creates the Auth account, then immediately writes the user's profile to `users/{uid}` with the role hard-coded to `attendee`. If that write fails, the account is deleted again.
+   - The app then returns to the Login screen, so the user signs in explicitly.
+   - Sessions persist across app restarts (Firebase Auth's AsyncStorage persistence), restored through an `onAuthStateChanged` listener.
+2. **Event discovery.**
+   - The Discover screen loads the `events` collection from Firestore, ordered by `date`.
+   - It supports title search and category filter chips.
+   - Event details show the date, venue, host, attendee faces and description.
+   - The venue can be placed on a map: the address text is geocoded on the device with `expo-location`, with an "Open in Maps" fallback.
+   - The list is cached on the device, so it still shows (with an offline banner) when the network is down.
+3. **RSVP.**
+   - Implemented as a Firestore **client-side transaction**: it reads the event and the user's own RSVP, flips `going` ↔ `not_going`, and writes the RSVP and `attendeeCount: increment(±1)` in one atomic commit.
+   - This way, concurrent RSVPs from different devices can't corrupt the attendee count. The security rules additionally reject any count change that isn't exactly this user's ±1.
+   - The UI updates instantly (optimistically), then adopts the committed result, or rolls back and shows an error.
+4. **Real-time commenting.**
+   - Comments stream live through Firestore's `onSnapshot` listener on `events/{id}/comments`, so a comment posted on one device appears on every open screen without refreshing.
+   - The listener is removed when the screen closes.
+   - Posting is a transaction that creates the comment and increments the event's `commentCount` atomically. The rules refuse a comment without the matching +1.
+5. **Profile.**
+   - Shows the user's name, email, role badge (Organizer/Admin, read from `users/{uid}.role`) and a "My RSVPs" list.
+   - Users can edit their name; the rules allow only `name`/`avatarUrl` changes and never `role` or `email`.
+   - Settings has a dark/light theme switch and logout.
+
+---
+
+## 5. Tech Stack
+
+### Frontend
+
+From `Frontend/package.json`; versions are the ones installed.
+
+| Library | Version | Purpose |
+|---|---|---|
+| React Native | 0.86.3 | Cross-platform mobile UI |
+| Expo (managed workflow) | SDK 57 (`expo` 57.0.25) | Tooling, dev server, native modules |
+| React | 19.2.3 | UI library |
+| TypeScript | 6.0.3 | Static typing |
+| Firebase JS SDK (modular) | 12.19.0 | Auth + Firestore client |
+| React Navigation (`native`, `native-stack`, `bottom-tabs`) | 7.4.1 / 7.19.2 / 7.19.2 | Navigation: auth stack, tabs, event stack |
+| Zustand | 5.0.15 | State management (auth, events, comments stores) |
+| react-native-reanimated + react-native-worklets | 4.5.1 + 0.10.1 | Animations |
+| moti | 0.30.0 | Declarative animations on top of Reanimated |
+| @react-native-async-storage/async-storage | 2.2.0 | Auth session persistence, offline event cache |
+| expo-location | 57.0.20 | Geocoding venue addresses |
+| react-native-maps | 1.27.2 | Venue map preview |
+| react-native-screens / react-native-safe-area-context | 4.26.2 / 5.7.0 | Native screens, safe areas |
+| expo-font, @expo-google-fonts/space-grotesk, @expo-google-fonts/inter | 57.0.4, 0.4.1, 0.4.2 | Custom fonts |
+| expo-splash-screen, expo-status-bar, @expo/vector-icons | 57.0.9, 57.0.1, 15.1.1 | Splash, status bar, icons (Ionicons) |
+| ESLint + eslint-config-expo (dev) | 9.39.5, 57.0.2 | Linting |
+
+### Backend
+
+From `Backend/package.json`.
+
+| Technology | Version | Purpose |
+|---|---|---|
+| Cloud Firestore | — | Document database |
+| Firebase Authentication (Email/Password) | — | User accounts and ID tokens |
+| Firestore Security Rules (`Backend/firestore.rules`) | rules_version 2 | Access control and data validation |
+| Firebase Local Emulator Suite (`firebase-tools`) | 15.31.0 | Local Auth + Firestore + Emulator UI |
+| firebase-admin | 14.5.0 | Emulator-only seed script |
+| @firebase/rules-unit-testing + firebase (client SDK) | 5.0.2 + 12.19.0 | Security-rules and race-condition tests |
+| TypeScript | 7.0.2 | Scripts and tests (run directly by Node 22.18+, no build step) |
+| Postman / newman | v2.1 collection / newman 6 (via `npx`) | API documentation and checks |
+
+**Architecture (a deliberate choice, not an omission):**
+- The backend runs entirely on Firebase's free **Spark plan**, with **no Cloud Functions and no custom server**.
+- The app talks to Firestore **directly through the client SDK**, and **Firestore Security Rules are the access-control layer**. Every read and write, from the app or from any HTTP client, is checked on Google's servers against `firestore.rules`.
+- Work a server would normally do is handled without one:
+  - role checks happen in the rules, which read `users/{uid}.role`;
+  - shared counters are kept consistent with client-side transactions plus rules that verify each ±1;
+  - real-time updates come from Firestore's own listeners.
+- This keeps the backend free, removes a whole tier to host and secure, and scales automatically. The trade-offs (such as the `commentCount` limit in Section 8) are documented where they arise.
+
+---
+
+## 6. Setup Guide
+
+These steps run the full stack locally against the **Firebase emulators**, with no Firebase account needed. Step 4 covers the real Firebase project, which is optional.
+
+> **Windows note:** the repo folder name contains `&`, which breaks `npx` and npm's `.bin` shims on Windows. Every command below uses the `npm run` scripts, which call the tools through `node` directly. Don't substitute `npx expo …` or `npx firebase …`.
+
+### 1. Prerequisites
+
+- **Node.js 22.18 or newer.** `Backend/package.json` requires `>=22.18`; the frontend runs on the same version.
+- **Java 21 or newer.** The Firestore emulator runs on the JVM; `firebase-tools` 15.31 enforces Java 21 as a minimum.
+- **Git**.
+- **Expo CLI and Firebase CLI:** no global install needed. Both come as local dependencies (`expo` in `Frontend/`, `firebase-tools` in `Backend/`) and are called through the npm scripts.
+- **A device to run the app on**, one of:
+  - an **Android emulator** (Android Studio) with **Expo Go** installed. This is what the app was verified on.
+  - an **iOS simulator** (macOS with Xcode) with Expo Go.
+  - a **physical phone** with Expo Go on the same Wi-Fi as your computer.
+
+### 2. Clone the repository
+
+<!-- TODO: replace <repo-url> with the real repository URL (no git remote is configured in this repo yet). -->
 
 ```bash
-git clone <repo-url>
-cd "Tech & Startup/Frontend"
-npm install
-npm start
+git clone <repo-url> "Tech & Startup"
+cd "Tech & Startup"
 ```
 
-Then scan the QR code with Expo Go (Android) or the Camera app (iOS). Or press `a` for an Android emulator, `i` for an iOS simulator, or `w` for web.
+Frontend and backend live in one repository, in `Frontend/` and `Backend/`.
 
-### Useful scripts (run inside `Frontend/`)
-
-| Command | What it does |
-|---|---|
-| `npm start` | Start the Expo dev server |
-| `npm run android` / `npm run ios` / `npm run web` | Start and open on a platform |
-| `npm run typecheck` | TypeScript check |
-
-> **Windows note:** the folder name contains `&`, which breaks `npx` and npm's `.bin` shims on Windows. The npm scripts call the Expo CLI through `node` directly, so use `npm start` instead of `npx expo start`. To add packages, run `node node_modules/expo/bin/cli install <pkg>`.
-
-### Firebase: emulators vs. production
-
-The app talks to Firebase directly (Auth + Firestore, JS SDK). There is no custom server; `Backend/firestore.rules` is the access control. The client config lives in `Frontend/src/services/firebase.ts`. It's the public Web app config from **Firebase Console → Project settings → Your apps**, not a secret, so it's committed.
-
-| Build | Talks to |
-|---|---|
-| Dev (`npm start`), default | Local emulators, project `demo-local-events-hub` |
-| Dev with `EXPO_PUBLIC_USE_EMULATOR=false` in `Frontend/.env` | Real project `events-hub-techstartup` |
-| Release build | Always the real project (emulator code is `__DEV__`-only) |
-
-**Run against the emulators (recommended for development):**
-
-1. In `Backend/`: `npm run emulators`, then in a second terminal `npm run seed:emulator`. Re-seed after every emulator restart, because the data is in memory.
-2. In `Frontend/`: `npm start`, then press `a` (Android emulator) or `i` (iOS simulator).
-3. Log in with a seeded account, e.g. `maya@loopdesk.io` / `startup123` (organizer). The Login screen shows this hint in dev.
-
-The emulator host is picked per platform: `10.0.2.2` on an Android emulator, `localhost` on an iOS simulator or web. **On a physical phone** (Expo Go on the same Wi-Fi), set `EXPO_PUBLIC_EMULATOR_HOST=<your computer's LAN IP>` in `Frontend/.env` and restart `npm start`. See `Frontend/.env.example`.
-
-**How the app uses Firebase:**
-- **Auth:** email/password through Firebase Auth. Sessions persist across restarts (AsyncStorage). Signup creates `users/{uid}` with `role: "attendee"` (see "Signup contract" below), then signs out and returns to Login with the email filled in, so the user logs in explicitly. Passwords are never stored by the app or in Firestore: Firebase Auth keeps only a salted hash, and the device keeps only session tokens.
-- **Events:** read from `events`, ordered by `date`. Opening an event refreshes it.
-- **RSVP:** one client-side transaction writes the RSVP and moves `attendeeCount` by ±1. The button disables while it's in flight.
-- **Comments:** a live `onSnapshot` listener while an event is open, removed when you leave. Posting runs a transaction that also increments `commentCount`.
-- **Dates:** Firestore dates arrive as `Timestamp`s and are converted with `toJSDate()` (`src/utils/firestoreDates.ts`) before formatting.
-
-**Venue map:** events store the venue as text only, so EventDetails geocodes it on the device (`expo-location`). On Android that needs the location permission, so the card shows **Show on map** and asks first. If you deny it, or the address can't be found, it offers **Open in Maps**, which searches the address in your maps app. Maps work in Expo Go as-is; a standalone Android release build also needs a Google Maps API key in `app.json` (`android.config.googleMaps.apiKey`).
-
-The events list is cached on the device (AsyncStorage, public event data only). If a refresh fails, the app keeps showing the cached list with an "offline" banner and a Retry button; pull down to refresh.
-
-### Project structure
-
-```
-Frontend/
-  App.tsx              font loading, splash, root navigator
-  src/
-    screens/           one file per screen
-    components/        reusable UI pieces
-    navigation/        React Navigation stacks
-    store/             Zustand stores
-    services/          Firebase init + one service per collection (auth, events, rsvp, comments, users)
-    theme/             colors, typography, spacing (single source of truth)
-    assets/            images, icons
-    utils/             helpers
-```
-
-All colors, fonts and spacing must come from `src/theme/`. Don't put inline hex values in screens or components.
-
-## Backend Setup Guide
-
-The backend is Firebase on the free **Spark** plan only: Firestore, Firebase Authentication (Email/Password) and Security Rules. There are no Cloud Functions and no custom server. The app talks to Firestore directly, so `Backend/firestore.rules` is the access-control layer. Nothing here needs the Blaze plan or billing.
-
-### Prerequisites
-
-- Node.js 22.18 or newer (the scripts are TypeScript run directly by Node, with no build step)
-- Java 21 or newer (the Firestore emulator runs on the JVM)
-
-### Run the emulators
+### 3. Install dependencies
 
 ```bash
-cd "Tech & Startup/Backend"
+cd Backend
 npm install
+cd ../Frontend
+npm install
+```
+
+### 4. Firebase setup
+
+**For local development, nothing is needed.** The emulators use the offline project `demo-local-events-hub`, and the app connects to them automatically in development builds.
+
+**To use a real Firebase project** (Spark plan):
+
+1. In the [Firebase Console](https://console.firebase.google.com), create a project. It starts on Spark; don't upgrade it or add billing.
+2. **Build → Firestore Database → Create database**: database ID `(default)`, location of your choice (`Backend/firebase.json` uses `nam5`), and **production mode** (deny all).
+3. **Build → Authentication → Sign-in method**: enable **Email/Password**.
+4. **Project settings → Your apps → Web (`</>`)**: register a web app and copy its `firebaseConfig`.
+5. Put that config in **`Frontend/src/services/firebase.ts`** (the `firebaseConfig` object). This is the pattern the repo uses. The web config is public client configuration, not a secret, so it's committed; access is enforced by Auth and the security rules. The committed file already holds the config for our project, `events-hub-techstartup`.
+6. Link the CLI and deploy the security rules from `Backend/`:
+
+   ```bash
+   npm run firebase -- login
+   npm run firebase -- use --add
+   npm run firebase -- deploy --only firestore:rules,firestore:indexes --project <your-project-id>
+   ```
+
+   Until the rules are deployed, the database keeps the Console's deny-all default.
+
+**Never commit a service account key** (`serviceAccountKey.json`): it bypasses all security rules. Nothing in this repo needs one. `Backend/.gitignore` blocks `*serviceAccountKey*.json` and `.env*`.
+
+### 5. Run the Firebase emulators
+
+In terminal 1:
+
+```bash
+cd Backend
 npm run emulators
 ```
 
-This starts the Auth emulator (`127.0.0.1:9099`), the Firestore emulator (`127.0.0.1:8080`) and the Emulator UI at http://127.0.0.1:4000. The emulator scripts always use the project `demo-local-events-hub`, even though `.firebaserc` points to the real project. `demo-` projects run entirely locally, need no `firebase login`, and can't reach real Firebase services.
+This starts:
+- the Auth emulator at `127.0.0.1:9099`;
+- the Firestore emulator at `127.0.0.1:8080`;
+- the **Emulator UI** at **http://127.0.0.1:4000**, where you can browse accounts and Firestore data.
 
-> **Windows note:** as with the frontend, the `&` in the folder name breaks npm's `.bin` shims, so use `npm run emulators` or `npm run firebase -- <command>` rather than `npx firebase ...`.
+### 6. Seed the demo data
 
-### Seed the emulators
-
-With the emulators running, in a second terminal:
+In terminal 2, with the emulators running:
 
 ```bash
+cd Backend
 npm run seed:emulator
 ```
 
-This wipes the emulators, then creates 4 users (Auth accounts and `users` docs), 12 events, plus RSVPs and comments. Every seeded account signs in with the password `startup123` (for example `maya@loopdesk.io`). Emulator data is in memory, so re-run the seed after each emulator restart.
+(`scripts/seed.ts`, data in `scripts/seedData.ts`.) It wipes the emulators, then creates **4 users** (Auth accounts plus `users` docs), **12 events**, **28 RSVPs** and **24 comments**. Every seeded account uses the password **`startup123`**:
 
-The script only ever targets the emulators. It refuses to run if:
-- the project isn't a `demo-` project;
-- `FIRESTORE_EMULATOR_HOST` or `FIREBASE_AUTH_EMULATOR_HOST` points anywhere other than this machine;
-- `GOOGLE_APPLICATION_CREDENTIALS` is set.
-
-It needs no service account key.
-
-| Script | What it does |
+| Account | Role |
 |---|---|
-| `npm run emulators` | Start the Auth + Firestore emulators and the Emulator UI |
-| `npm run seed:emulator` | Wipe and re-seed the emulators |
-| `npm test` | Unit tests (no emulator needed) |
-| `npm run test:emulator` | Start throwaway emulators, run the emulator tests (signup, security rules, RSVP and comment races), stop them |
-| `npm run typecheck` | TypeScript check |
+| `maya@loopdesk.io` | organizer |
+| `daniel@buildspace.club` | organizer |
+| `priya@student.uni.edu` | attendee |
+| `liam@stackpilot.app` | attendee |
 
-### Link the real Firebase project (Spark plan)
+The seed script refuses to run against anything but local emulators with a `demo-` project, and refuses if `GOOGLE_APPLICATION_CREDENTIALS` is set. Emulator data is kept in memory only, so **re-run the seed after every emulator restart**.
 
-1. In the [Firebase Console](https://console.firebase.google.com), create a project. It starts on Spark. Don't upgrade it or add billing.
-2. **Build → Firestore Database → Create database**, and choose **production mode** (deny all), not test mode.
-3. **Build → Authentication → Sign-in method**, and enable **Email/Password**.
-4. Link it locally: `npm run firebase -- login`, then `npm run firebase -- use --add` and pick the project.
-5. Deploy the rules and indexes: `npm run firebase -- deploy --only firestore:rules,firestore:indexes --project events-hub-techstartup`. Until you do, the database keeps the Console's deny-all default. Re-run it whenever `firestore.rules` changes.
+### 7. Run the app
 
-### Secrets: what's safe to commit
+In terminal 3:
 
-- **Safe (not a secret):** the client-side Firebase config (`apiKey`, `authDomain`, `projectId`, `storageBucket`, `messagingSenderId`, `appId`) from **Project Settings → Your apps**. It only identifies the project and ships inside the app. Access is enforced by `firestore.rules` and Firebase Auth, not by keeping this config hidden.
-- **Secret (never commit):** a **service account key** (`serviceAccountKey.json`). It grants full admin access and bypasses all security rules. Nothing in this repo needs one (the seed script runs against the emulator with no credentials), and `Backend/.gitignore` blocks `*serviceAccountKey*.json` and `.env*` in case one is ever downloaded.
+```bash
+cd Frontend
+npm start
+```
 
-### Signup contract (client-side)
+Then:
+- **Android emulator:** press `a` in the terminal, or open Expo Go and enter the URL shown.
+- **iOS simulator:** press `i`.
+- **Physical phone:** scan the QR code with Expo Go (Android) or the Camera app (iOS). This also needs the setting in step 8.
 
-**Every signup screen must follow this.** Signup and login run entirely in the app through the Firebase Auth SDK, which hashes and salts passwords, so there's nothing to build for that. On the Spark plan there's no Auth trigger (that needs Cloud Functions), so **the app itself must create the user's profile document**:
+Log in with a seeded account; the Login screen shows `maya@loopdesk.io / startup123` as a hint in development. Or create a new account: after signup the app returns to Login so you can sign in.
 
-1. Call `createUserWithEmailAndPassword(auth, email, password)`.
-2. **Immediately after it succeeds, in the same signup function**, create `users/{uid}` (with `uid` from the returned credential) containing exactly:
+### 8. Switch between emulator and production Firebase
 
-   | Field | Value |
-   |---|---|
-   | `name` | the entered name, trimmed (1–80 characters) |
-   | `email` | `credential.user.email` (the account's own email) |
-   | `role` | **the literal `"attendee"`. Hardcode it; never take it from a form field, route param or any other input** |
-   | `avatarUrl` | `""` |
+Controlled by `Frontend/src/services/firebase.ts`, configured through `Frontend/.env`. Copy `Frontend/.env.example` to `Frontend/.env`, then restart `npm start` after any change.
 
-3. If the profile write fails, delete the just-created Auth user (`deleteUser(credential.user)`) and show the error. Otherwise the account exists with no profile, and the email is "taken" forever.
-4. Log in with `signInWithEmailAndPassword`. The profile already exists, so there's nothing else to write.
+| Build | Talks to |
+|---|---|
+| Development build (`npm start`), default | **Local emulators** (project `demo-local-events-hub`) |
+| Development build with `EXPO_PUBLIC_USE_EMULATOR=false` | **Real project** (`events-hub-techstartup`) |
+| Release build | **Always the real project**: the emulator code only runs when `__DEV__` is true |
 
-The reference implementation is `Backend/src/signUp.ts`. Use it as-is in the app. `firestore.rules` enforces the same contract server-side, so a modified or hand-crafted client is rejected if it tries to:
-- create a profile for another uid;
-- use any role other than `attendee`;
-- add extra fields;
-- use an email that isn't the account's own;
-- use a blank or over-long name;
-- overwrite an existing profile.
+The emulator host is chosen per platform: `10.0.2.2` on an Android emulator, `localhost` on an iOS simulator or web. **On a physical phone**, set `EXPO_PUBLIC_EMULATOR_HOST=<your computer's LAN IP>` in `Frontend/.env`.
 
-`Backend/tests/signup.emulator.test.ts` checks each of these (`npm run test:emulator`).
+**Useful scripts**
 
-### Access rules (what `firestore.rules` allows)
+| Where | Command | What it does |
+|---|---|---|
+| `Frontend/` | `npm start` | Start the Expo dev server |
+| `Frontend/` | `npm run android` / `ios` / `web` | Start and open on a platform |
+| `Frontend/` | `npm run typecheck` | TypeScript check |
+| `Frontend/` | `npm run lint` | ESLint |
+| `Backend/` | `npm run emulators` | Start the Auth + Firestore emulators and Emulator UI |
+| `Backend/` | `npm run seed:emulator` | Wipe and re-seed the emulators |
+| `Backend/` | `npm test` | Unit tests (no emulator needed) |
+| `Backend/` | `npm run test:emulator` | Start throwaway emulators, run the rules and race-condition tests, stop them |
+| `Backend/` | `npm run typecheck` | TypeScript check |
 
-Everything is denied unless listed here. Roles come from `users/{uid}.role`, read live by the rules; there are no custom claims on Spark.
+**Promoting a user to organizer or admin.** Everyone signs up as `attendee`, and there is no in-app promotion screen. To promote someone for a demo, change `users/{uid}.role` in the Emulator UI (http://127.0.0.1:4000/firestore) or the Firebase Console. Those edits use admin access, so the no-self-promotion rule doesn't block them. Type the value exactly: `organizer` or `admin`.
+
+---
+
+## 7. Database / Data Model
+
+The data model is defined once in **`Backend/src/types.ts`** and mirrored by the app in **`Frontend/src/services/types.ts`**. Field names match exactly. In both, the document id lives in the path, not the document body; the app adds it as `id` when reading.
+
+```
+users/{userId}
+events/{eventId}
+events/{eventId}/rsvps/{userId}        ← doc id is the attendee's uid
+events/{eventId}/comments/{commentId}
+```
+
+**`users/{userId}`** (`User`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | 1–80 characters, trimmed (enforced by the rules) |
+| `email` | string | Must equal the Auth account's email; can never change |
+| `role` | `'attendee' \| 'organizer' \| 'admin'` | Always `attendee` at signup |
+| `avatarUrl` | string | Up to 2048 characters; `""` at signup |
+
+**`events/{eventId}`** (`Event`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `title` | string | Non-blank, up to 120 characters |
+| `description` | string | Non-blank, up to 5000 characters |
+| `date` | Timestamp | Start date and time. The app converts it with `toJSDate()` (`Frontend/src/utils/firestoreDates.ts`). |
+| `location` | string | Venue and address as one string; non-blank, up to 200 characters |
+| `category` | `'Hackathon' \| 'Networking' \| 'Pitch Night' \| 'Workshop' \| 'Demo Day' \| 'Panel'` | |
+| `organizerId` | string | uid of the organizer who owns the event |
+| `attendeeCount` | int ≥ 0 | Starts at 0; moves only with RSVPs |
+| `commentCount` | int ≥ 0 | Starts at 0; moves only with comments |
+| `imageUrl` | string | Up to 2048 characters |
+
+**`events/{eventId}/rsvps/{userId}`** (`Rsvp`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `status` | `'going' \| 'not_going'` | Cancelling sets `not_going`; RSVPs are never deleted |
+| `updatedAt` | Timestamp | Server time (`serverTimestamp()`) |
+
+**`events/{eventId}/comments/{commentId}`** (`Comment`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `userId` | string | Author's uid; must be the caller |
+| `text` | string | Non-blank, under 500 characters (the app caps it at 280) |
+| `createdAt` | Timestamp | Server time (`serverTimestamp()`) |
+
+**Denormalised counters.** `attendeeCount` and `commentCount` are stored on the event so lists can show them without counting subcollections. They are kept consistent by transactions (Section 4) and checked by the rules (Section 8).
+
+**Indexes.** None beyond Firestore's automatic single-field indexes (`Backend/firestore.indexes.json`).
+
+**Database dump.** This project uses Firestore, not SQL, so the "database dump" submitted with this project is a **Firestore export** rather than a `.sql` file. See the Submission Checklist (Section 11) for how it's produced and where it lives.
+
+---
+
+## 8. Security Model
+
+There is no custom server, so **Firestore Security Rules (`Backend/firestore.rules`) are the security layer**. They run on Google's servers for every request, whether it comes from the app, a modified app or a hand-written HTTP call, so the app itself is never trusted.
+
+**Authentication: Firebase Authentication (Email/Password).**
+- Passwords are handled entirely by Firebase Auth, which stores them salted and hashed. They never reach Firestore or the app's storage.
+- A signed-in client holds a Firebase **ID token**, a signed JWT that expires after 1 hour and is refreshed automatically. Every Firestore request carries it, and the rules read the caller from `request.auth`.
+- On the device, only session tokens are stored (AsyncStorage), never the password.
+
+**Authorization: role-based (attendee / organizer / admin).**
+- **Deny by default.** The last match in the rules, `match /{document=**} { allow read, write: if false; }`, refuses everything not explicitly allowed. Every allow rule requires a signed-in caller, so **nothing is readable or writable without logging in**. This was checked live against the production database: 16 of 16 unauthenticated requests were refused.
+- **Roles live in `users/{uid}.role`** and are read live by the rules (`callerRole()` does a `get()` on the caller's own profile). The Spark plan has no Cloud Functions to set custom claims, so the profile document is the source of truth, which is why protecting that field matters.
 
 | Path | Read | Create | Update | Delete |
 |---|---|---|---|---|
-| `users/{uid}` | signed in | own uid only, `role: "attendee"`, own login email | own `name`/`avatarUrl` only (never `role` or `email`); admins may also change `role` | nobody |
-| `events/{id}` | signed in | organizer/admin; `organizerId` = self (admins: anyone); counters start at 0 | owner organizer or admin; can't change `organizerId` (admins can) or the counters. **Plus** any signed-in user may change `attendeeCount` alone, by exactly the ±1 their own RSVP makes in the same commit, or `commentCount` alone, by ±1 | owner organizer or admin |
-| `events/{id}/rsvps/{uid}` | signed in | own uid only; `status` `going`/`not_going`; `updatedAt: serverTimestamp()`; committed together with the matching `attendeeCount` change | same as create | nobody (cancel = `not_going`) |
-| `events/{id}/comments/{cid}` | signed in | `userId` = self; non-blank `text` under 500 characters; `createdAt: serverTimestamp()`; committed together with `commentCount` +1 | nobody (comments are immutable) | author or admin, committed together with `commentCount` −1 |
+| `users/{uid}` | signed in | own uid only; `role` must be `attendee`; `email` must be the account's own | own `name`/`avatarUrl` only; admins may change `role` | nobody |
+| `events/{id}` | signed in | organizer or admin; as themselves (admins: anyone); counters start at 0 | owner organizer or admin; can't hand off ownership (admins can) or edit counters. Separately, any signed-in user may move `attendeeCount` by exactly their own RSVP's ±1, or `commentCount` by ±1. | owner organizer or admin |
+| `events/{id}/rsvps/{uid}` | signed in | own uid only; paired with the matching `attendeeCount` change | own only, same checks | nobody |
+| `events/{id}/comments/{cid}` | signed in | as yourself only; paired with `commentCount` +1 | nobody (comments are immutable) | author or admin; paired with `commentCount` −1 |
 
-The frontend must follow these:
-- **Timestamps:** write `updatedAt` and `createdAt` with `serverTimestamp()`. Client clock values are rejected.
-- **Cancelling an RSVP:** set `status: "not_going"`; don't delete the doc.
-- **Document shapes:** send exactly the schema fields. Extra fields are rejected.
+**Users cannot promote themselves.** This is the most important rule, because there's no server enforcing roles.
+- **At signup** (`allow create` on `users/{userId}`): the new profile's `role` must be exactly `'attendee'`, the document id must be the caller's own uid, and `email` must equal the email in the caller's token. A client can't sign up as an organizer or admin, or create a profile for someone else.
+- **On update** (`allow update` on `users/{userId}`): a user editing their own profile must leave `role` unchanged (`request.resource.data.role == resource.data.role`) and may only change `name` and `avatarUrl` (`affectedKeys().hasOnly(['name', 'avatarUrl'])`). Either check alone blocks self-promotion; having both is defence in depth.
+- **Only an admin** (`isAdmin()`, checked against the caller's stored role) may change someone's role. Organizers can't promote themselves or anyone else.
+- **Tests.** Seven dedicated "role spoofing" tests cover these cases, and deleting each guard in turn makes them fail (mutation-tested in Phase 8). The rejection was also confirmed on the live project: an attendee's attempt to set their role to `admin` got `403 PERMISSION_DENIED`.
 
-`npm run test:emulator` covers every row, allowed and denied.
+**Acting only as yourself.**
+- RSVP documents are keyed by uid and writable only when that uid is the caller.
+- Comments must carry `userId == request.auth.uid`.
+- A comment can be deleted only by its author or an admin, not even by the event's organizer.
 
-### RSVP (client-side transaction)
+**Data integrity.** Counter changes must be paired with the RSVP or comment that justifies them, checked against the stored value (`counterMovesBy`, `goingDelta`), so a tampered client can't inflate or deflate counts through RSVPs. Counters can never go below 0.
 
-Use the reference implementation in `Backend/src/services/rsvpService.ts`:
+**Input validation and sanitisation.** Two layers; the second is the one that can't be bypassed:
+- **Client-side, for fast feedback** (`Frontend/src/utils/validation.ts`, `Frontend/src/utils/sanitize.ts`):
+  - email format;
+  - password at least 8 characters;
+  - name required and under 60 characters;
+  - comments stripped of `<script>` blocks, HTML tags and control characters, extra blank lines collapsed, capped at 280 characters.
+- **Rules-level, enforced by the server** (`firestore.rules`):
+  - **exact document shapes:** `hasOnly` + `hasAll`, so extra or missing fields are rejected;
+  - **types and lengths:** name 1–80; title ≤ 120; description ≤ 5000; location ≤ 200; URLs ≤ 2048; comment text non-blank and < 500;
+  - **allowed values:** role; category; RSVP status;
+  - **server timestamps only:** `createdAt`/`updatedAt` must equal `request.time`, so clients can't backdate;
+  - **existence:** the event must exist for RSVPs and comments.
+- The app renders text with React Native `<Text>`, which never interprets HTML, so stored text can't inject markup.
 
-```ts
-import { toggleRsvp } from './rsvpService';
+**Tests.** A fresh run of `npm run test:emulator` gives **83 / 83 emulator tests passing** (66 security-rules tests, 7 signup-contract tests, 5 RSVP race-condition tests, 5 comment race-condition tests), plus **5 / 5** unit tests from `npm test`. The rules tests cover every allow and deny path in the table above. See `Backend/tests/`.
 
-const { status, attendeeCount } = await toggleRsvp(db, eventId, auth.currentUser!.uid);
-```
+**Accepted limits (documented rather than hidden):**
+- **`commentCount` nudging.** Comment ids are random, so the rules can't tell whether a lone `commentCount` ±1 comes with a real comment. A tampered client could nudge the display count by 1 per write (never below 0). Closing this needs a Cloud Function (Blaze plan). It's accepted because the count is display-only; the actual comments are protected.
+- **Profile visibility.** Any signed-in user can read other users' profiles, including email, because the app shows organizer and attendee names and avatars.
 
-Inside one `runTransaction`, it:
-1. reads the event and the caller's `rsvps/{uid}`;
-2. flips `going` ↔ `not_going` (a missing RSVP counts as not going);
-3. writes the RSVP (`updatedAt: serverTimestamp()`) and `attendeeCount: increment(±1)` atomically.
+**Secrets.** The committed Firebase web config is public by design. No service account key exists in the repo or its history; this was checked across all commits in the Phase 8 security audit.
 
-**Why a transaction, even without a server:** every phone writes to the same `attendeeCount` field. With a naive read-then-write, two people who tap RSVP at the same moment both read `12`, both write `13`, and one RSVP disappears from the count forever. Nothing on a server can serialise them for us.
-- **What the transaction does:** it makes Firestore check at commit time that nothing it read has changed. If another RSVP got in first, it retries on fresh data.
-- **Why the RSVP and counter go in one commit:** a crash or lost connection between the two writes can't leave the RSVP saved but the count unchanged.
-- **Why `increment()`:** it's applied by the server to the value it holds at commit, so a count computed from a read that has since gone out of date is never written.
-- **What the rules add:** the counter may only move by exactly the ±1 your own RSVP makes in the same commit, checked against the stored value. A buggy or tampered client that writes `count + 1` from a stale read, or bumps the count without RSVPing, gets `permission-denied` instead of corrupting the number.
+---
 
-In the UI, disable the RSVP button while a toggle is in flight, and show the error if one is thrown (e.g. `permission-denied` if the same account toggled from two devices at the same instant; tapping again works).
+## 9. API Documentation
 
-### Comments (real-time, no server)
+**There is no custom REST server.** In this project, "API" means two things:
 
-**Reading is Firestore's own listener.** There is nothing to build for "real-time": subscribe to the subcollection and Firestore pushes every new or deleted comment to all open screens.
-
-```ts
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
-
-useEffect(() => {
-  const q = query(collection(db, 'events', eventId, 'comments'), orderBy('createdAt', 'desc'), limit(50));
-  return onSnapshot(q, (snap) => {
-    // serverTimestamps: 'estimate' fills createdAt for your own just-posted comment until the server confirms it.
-    setComments(snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })));
-  }, (error) => setError(error.message));
-}, [eventId]); // returning onSnapshot's unsubscribe stops the listener on unmount
-```
-
-**Writing goes through `Backend/src/services/commentService.ts`.** There is no Cloud Function trigger on Spark to keep `commentCount` up to date, so the count is maintained by the same client-side transaction technique as RSVPs:
-
-```ts
-import { addComment, deleteComment } from './commentService';
-
-const commentId = await addComment(db, eventId, auth.currentUser!.uid, text);
-await deleteComment(db, eventId, commentId); // author or admin
-```
-
-- **`addComment`** runs one `runTransaction`. It checks the event still exists, creates the comment (`createdAt: serverTimestamp()`) and applies `commentCount: increment(1)` in the same commit.
-- **`deleteComment`** reads the comment first, then deletes it and applies `increment(-1)`. A double tap or a second device finds the comment already gone and can't decrement twice.
-- **What the rules enforce:** a comment can't be created or deleted unless `commentCount` moves by exactly +1/−1 in the same commit. The count can therefore never drift from the real number of comments through the app.
-- **Known limit:** comment ids are random, so the rules can't tell whether a lone `commentCount` ±1 write comes with a comment. A tampered client could nudge the count by 1 per write (never below 0) without commenting. Closing that needs a server-side trigger (Blaze) or deterministic comment ids. It's accepted here because the count is display-only.
-
-### Promoting a user to organizer or admin
-
-Everyone signs up as `attendee`. The Spark plan has no admin Cloud Function, so for testing and demos, promote a user by hand:
-
-- **Real project:** open the [Firebase Console](https://console.firebase.google.com) → **Firestore Database**, open `users/{userId}`, change the `role` field to `organizer` or `admin`, and save.
-- **Emulators:** do the same in the Emulator UI at http://127.0.0.1:4000/firestore.
-
-Console and Emulator UI edits go through the Admin API, so they aren't blocked by the rules that stop users from changing their own role. The user's app picks up the new role the next time it reads their profile.
-
-## API Documentation
-
-**There is no custom server.** The "API" is Firestore's own REST interface, which every Firestore database exposes over HTTPS automatically. The app uses the Firebase SDK, which talks to the same service. Every REST request is checked by the same `firestore.rules` as the app's requests, so the rules are the API's access control. There are no endpoints to deploy or host; they exist as soon as the database does.
+1. **Firestore's own REST interface.** Every Firestore database is automatically reachable over HTTPS at `https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents/{path}`, authenticated with `Authorization: Bearer <Firebase ID token>`. The same `firestore.rules` check every REST request.
+2. **The client SDK operations the app performs** (Firebase JS SDK, `Frontend/src/services/`). They hit the same service under the same rules.
 
 | | Production | Local emulators |
 |---|---|---|
 | Firestore base URL | `https://firestore.googleapis.com/v1` | `http://127.0.0.1:8080/v1` |
 | Auth base URL | `https://identitytoolkit.googleapis.com/v1` | `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1` |
-| Project id | your Firebase project id | `demo-local-events-hub` |
-
-A document path is `{base}/projects/{PROJECT_ID}/databases/(default)/documents/{path}`, authenticated with the header `Authorization: Bearer <Firebase ID token>`.
+| Project id | `events-hub-techstartup` | `demo-local-events-hub` |
 
 ### Postman collection
 
-`Backend/postman_collection.json` (Postman collection v2.1) holds every request below, with test assertions. It targets the emulators by default. To use it:
+**`Backend/postman_collection.json`** (Postman collection v2.1) contains every request in this section, with test assertions. It targets the emulators by default.
 
-1. Start the emulators and seed them (`npm run emulators`, then `npm run seed:emulator`).
+1. Start and seed the emulators (Section 6, steps 5–6).
 2. Either import the file into Postman (**Import → File**) and run the collection in order, or run it from `Backend/` with the Postman CLI:
 
    ```bash
    npx -y newman@6 run postman_collection.json
    ```
 
-   Expected result: 9 requests, 14 assertions, 0 failed.
+   Expected result: **9 requests, 14 assertions, 0 failed**.
 
-**Against the real project**, override the variables on the command line (or edit them in Postman). The committed file keeps pointing at the emulators.
+To run it against the real project, override the collection variables. Values in `<…>` are placeholders:
 
 ```powershell
 npx -y newman@6 run postman_collection.json `
@@ -289,36 +428,47 @@ npx -y newman@6 run postman_collection.json `
   --env-var "eventId=<an existing event id>" --env-var "otherUserId=<another user's uid>"
 ```
 
-The signed-in account must be an `attendee` (the tests check that its role stays `attendee`), and `otherUserId` must be a different user. Verified on `events-hub-techstartup` (2026-09-27): 9 requests, 14 assertions, 0 failed.
+This was run on the emulators and on `events-hub-techstartup` (2026-09-27): 9 requests, 14 assertions, 0 failed on both.
 
 ### Getting an ID token
 
-The collection's first request does this for you and stores `idToken` and `uid` for the other requests. By hand, either:
+- **In the app:** the Firebase Auth SDK handles tokens (`signInWithEmailAndPassword`, `createUserWithEmailAndPassword`), and the SDK attaches them to every request.
+- **For REST / Postman:** use the Firebase Auth REST endpoint `signInWithPassword`. The collection's first request does this and stores `idToken` and `uid` for the rest. The token lasts 1 hour.
 
-- **Firebase Auth REST `signInWithPassword`** (the ID token lasts 1 hour):
+```http
+POST {authBase}/accounts:signInWithPassword?key={WEB_API_KEY}
+Content-Type: application/json
 
-  ```http
-  POST {authBase}/accounts:signInWithPassword?key={WEB_API_KEY}
-  Content-Type: application/json
+{ "email": "priya@student.uni.edu", "password": "startup123", "returnSecureToken": true }
+```
 
-  { "email": "priya@student.uni.edu", "password": "startup123", "returnSecureToken": true }
-  ```
+```json
+{ "localId": "usr-05", "email": "priya@student.uni.edu", "idToken": "eyJhbGciOi…", "refreshToken": "…", "expiresIn": "3600" }
+```
 
-  ```json
-  { "localId": "usr-05", "email": "priya@student.uni.edu", "idToken": "eyJhbGciOi…", "refreshToken": "…", "expiresIn": "3600" }
-  ```
+The Web API key is in **Project settings → General**; it isn't a secret. The Auth emulator accepts any key, for example `fake-api-key`.
 
-  The Web API key is in **Project Settings → General** (it's not a secret; see "Secrets" above). The Auth emulator accepts any key, e.g. `fake-api-key`. The seeded accounts exist only in the emulators.
+### Operations
 
-- **Copy one from the app during development:** after signing in, log `await auth.currentUser?.getIdToken()` and paste it into the `idToken` variable. Remove the log before committing.
+| Operation | Collection path | App (SDK) call | Auth requirement | In Postman |
+|---|---|---|---|---|
+| Sign up | Auth, then `users/{uid}` | `createUserWithEmailAndPassword`, `setDoc` (`authService.signup`) | none, then own uid | — |
+| Log in | Auth | `signInWithEmailAndPassword` (`authService.login`) | none | ✅ Sign in |
+| List events | `events` | `getDocs(query(…, orderBy('date')))` (`eventsService.getEvents`) | signed in | ✅ |
+| Read one event | `events/{eventId}` | `getDoc` (`eventsService.getEventById`) | signed in | ✅ |
+| Read own profile | `users/{uid}` | `getDoc` (`usersService.getProfile`) | signed in | ✅ |
+| Update own name | `users/{uid}` | `updateDoc({ name })` (`usersService.updateMyName`) | own uid; `name`/`avatarUrl` only | ✅ (rejected cases) |
+| RSVP / cancel | `events/{id}/rsvps/{uid}` + `events/{id}` | `runTransaction` (`rsvpService.toggleRsvp`) | own uid; paired ±1 | — (SDK tests) |
+| Read comments (live) | `events/{id}/comments` | `onSnapshot(query(…, orderBy('createdAt','desc')))` (`commentsService.subscribeToComments`) | signed in | — |
+| Post comment | `events/{id}/comments` + `events/{id}` | `runTransaction` (`commentsService.addComment`) | as self; paired +1 | — (SDK tests) |
 
-### Endpoints
+RSVP and comment writes are multi-document transactions, which the app performs through the SDK. They're exercised by the SDK-based rules and race-condition tests in `Backend/tests/`, not by single Postman requests.
 
-Responses use Firestore's typed JSON (`stringValue`, `integerValue`, `timestampValue`…). The examples are real emulator output from the seeded data, shortened with `…`.
+### Example requests and responses
 
-#### GET a single event: `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/events/{eventId}`
+These come from the Postman collection. The responses are real emulator output from the seeded data, shortened with `…`. Firestore REST uses typed JSON (`stringValue`, `integerValue`, `timestampValue`…).
 
-Allowed for any signed-in user.
+**Read one event:** `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/events/{eventId}`. Any signed-in user.
 
 ```http
 GET /v1/projects/demo-local-events-hub/databases/(default)/documents/events/evt-01
@@ -344,9 +494,7 @@ Authorization: Bearer {idToken}
 }
 ```
 
-#### List events: `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/events?pageSize=5`
-
-Allowed for any signed-in user. It returns up to `pageSize` documents; pass the response's `nextPageToken` as `pageToken` to get the next page.
+**List events:** `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/events?pageSize=5`. Any signed-in user. Pass `nextPageToken` as `pageToken` for the next page.
 
 ```http
 GET /v1/projects/demo-local-events-hub/databases/(default)/documents/events?pageSize=5
@@ -363,9 +511,7 @@ Authorization: Bearer {idToken}
 }
 ```
 
-#### GET my own user document: `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/users/{uid}`
-
-`{uid}` is the `localId` returned at sign-in.
+**Read own profile:** `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/users/{uid}`, where `{uid}` is the `localId` from sign-in.
 
 ```http
 GET /v1/projects/demo-local-events-hub/databases/(default)/documents/users/usr-05
@@ -386,18 +532,18 @@ Authorization: Bearer {idToken}
 }
 ```
 
-### Rejected requests (the rules at work)
+### Rejected requests (the security rules at work)
 
-These are in the collection's **2. Rejected by security rules** folder. They show that the database refuses requests the rules don't allow, even though anyone can reach the URL.
+The collection's **2. Rejected by security rules** folder shows the database refusing requests even though anyone can reach the URL:
 
 | Request | Why it's refused | Emulator | Production |
 |---|---|---|---|
 | `GET …/events/evt-01` with **no** `Authorization` header | every read requires `request.auth != null` | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
-| `GET …/events/evt-01` with `Bearer not-a-real-token` | the token isn't a valid Firebase ID token | `400 INVALID_ARGUMENT` ("invalid jwt") | `401 UNAUTHENTICATED` |
-| `PATCH …/users/usr-01?updateMask.fieldPaths=name` as Priya (`usr-05`) | wrong-user write: users may only update their own profile | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
-| `PATCH …/users/usr-05?updateMask.fieldPaths=role` with `"admin"` as Priya | self-promotion: users can never change their own `role` | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
+| `GET …/events/evt-01` with `Bearer not-a-real-token` | not a valid Firebase ID token | `400 INVALID_ARGUMENT` | `401 UNAUTHENTICATED` |
+| `PATCH …/users/usr-01?updateMask.fieldPaths=name` as Priya (`usr-05`) | users may only update their own profile | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
+| `PATCH …/users/usr-05?updateMask.fieldPaths=role` with `"admin"` as Priya | users can never change their own `role` | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
 
-A follow-up `GET` of `users/usr-05` confirms `role` is still `attendee`. Example wrong-user write:
+A follow-up `GET` confirms Priya's `role` is still `attendee`. Example wrong-user write:
 
 ```http
 PATCH /v1/projects/demo-local-events-hub/databases/(default)/documents/users/usr-01?updateMask.fieldPaths=name
@@ -407,25 +553,57 @@ Content-Type: application/json
 { "fields": { "name": { "stringValue": "Hacked" } } }
 ```
 
-```json
-{ "error": { "code": 403, "message": "\nfalse for 'create' @ L81, … false for 'update' @ L88, …", "status": "PERMISSION_DENIED" } }
-```
-
-That `message` is the emulator's rule trace, which helps with debugging. Production returns the generic message instead, with the same `status`, so no rule details leak:
+Production response. The emulator returns a rule trace in `message` instead, with the same `status`:
 
 ```json
 { "error": { "code": 403, "message": "Missing or insufficient permissions.", "status": "PERMISSION_DENIED" } }
 ```
 
-Both columns of the table above were verified by running the collection on the emulators and on `events-hub-techstartup`. On production an attendee creating an event was also refused (403), and an organizer creating one was allowed (200).
+---
 
-The full allowed/denied matrix (83 cases, SDK-based) is in `Backend/tests/` (`npm run test:emulator`).
+## 10. Team Roles & Contributions
 
-## References
+<!-- TODO: fill in manually. Do not leave placeholder rows in the submitted version. -->
 
-Axios contributors. (2026). *axios* (Version 1.20.0) [Computer software]. npm. https://www.npmjs.com/package/axios
+| Name | Role | Key Contributions |
+|---|---|---|
+| TODO | TODO | TODO |
+| TODO | TODO | TODO |
+| TODO | TODO | TODO |
+| TODO | TODO | TODO |
 
-Expo. (2026). *expo* (Version 57.0.25) [Computer software]. npm. https://www.npmjs.com/package/expo
+---
+
+
+## 11. References (APA 7th)
+
+<!-- Package versions are the installed versions (Frontend/package.json and Backend/package.json); years are the npm publish dates of those versions. Documentation pages have no publication date, so they are cited as n.d. with a retrieval date. -->
+
+Duplessis, J. (2026). *react-native-safe-area-context* (Version 5.7.0) [Computer software]. npm. https://www.npmjs.com/package/react-native-safe-area-context
+
+ESLint contributors. (2026). *eslint* (Version 9.39.5) [Computer software]. npm. https://www.npmjs.com/package/eslint
+
+Expo. (n.d.-a). *Location*. Expo documentation (SDK 57). Retrieved September 27, 2026, from https://docs.expo.dev/versions/v57.0.0/sdk/location/
+
+Expo. (n.d.-b). *Using Firebase*. Expo documentation. Retrieved September 27, 2026, from https://docs.expo.dev/guides/using-firebase/
+
+Expo. (2025a). *@expo-google-fonts/inter* (Version 0.4.2) [Computer software]. npm. https://www.npmjs.com/package/@expo-google-fonts/inter
+
+Expo. (2025b). *@expo-google-fonts/space-grotesk* (Version 0.4.1) [Computer software]. npm. https://www.npmjs.com/package/@expo-google-fonts/space-grotesk
+
+Expo. (2026a). *eslint-config-expo* (Version 57.0.2) [Computer software]. npm. https://www.npmjs.com/package/eslint-config-expo
+
+Expo. (2026b). *expo* (Version 57.0.25) [Computer software]. npm. https://www.npmjs.com/package/expo
+
+Expo. (2026c). *expo-font* (Version 57.0.4) [Computer software]. npm. https://www.npmjs.com/package/expo-font
+
+Expo. (2026d). *expo-location* (Version 57.0.20) [Computer software]. npm. https://www.npmjs.com/package/expo-location
+
+Expo. (2026e). *expo-splash-screen* (Version 57.0.9) [Computer software]. npm. https://www.npmjs.com/package/expo-splash-screen
+
+Expo. (2026f). *expo-status-bar* (Version 57.0.1) [Computer software]. npm. https://www.npmjs.com/package/expo-status-bar
+
+Expo. (2026g). *@expo/vector-icons* (Version 15.1.1) [Computer software]. npm. https://www.npmjs.com/package/@expo/vector-icons
 
 Google. (n.d.-a). *Authentication REST API*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/reference/rest/auth
 
@@ -451,7 +629,9 @@ Meta Platforms. (2025). *react* (Version 19.2.3) [Computer software]. npm. https
 
 Meta Platforms. (2026). *react-native* (Version 0.86.3) [Computer software]. npm. https://www.npmjs.com/package/react-native
 
-Microsoft. (2026). *typescript* (Version 7.0.2) [Computer software]. npm. https://www.npmjs.com/package/typescript
+Microsoft. (2026a). *typescript* (Version 6.0.3) [Computer software]. npm. https://www.npmjs.com/package/typescript
+
+Microsoft. (2026b). *typescript* (Version 7.0.2) [Computer software]. npm. https://www.npmjs.com/package/typescript
 
 Poimandres. (2026). *zustand* (Version 5.0.15) [Computer software]. npm. https://www.npmjs.com/package/zustand
 
@@ -461,8 +641,16 @@ React Native Community. (2025). *@react-native-async-storage/async-storage* (Ver
 
 react-native-maps contributors. (2026). *react-native-maps* (Version 1.27.2) [Computer software]. npm. https://www.npmjs.com/package/react-native-maps
 
-React Navigation contributors. (2026). *@react-navigation/native* (Version 7.4.1) [Computer software]. npm. https://www.npmjs.com/package/@react-navigation/native
+React Navigation contributors. (2026a). *@react-navigation/bottom-tabs* (Version 7.19.2) [Computer software]. npm. https://www.npmjs.com/package/@react-navigation/bottom-tabs
+
+React Navigation contributors. (2026b). *@react-navigation/native* (Version 7.4.1) [Computer software]. npm. https://www.npmjs.com/package/@react-navigation/native
+
+React Navigation contributors. (2026c). *@react-navigation/native-stack* (Version 7.19.2) [Computer software]. npm. https://www.npmjs.com/package/@react-navigation/native-stack
 
 Rojo, F. (2025). *moti* (Version 0.30.0) [Computer software]. npm. https://www.npmjs.com/package/moti
 
-Software Mansion. (2026). *react-native-reanimated* (Version 4.5.1) [Computer software]. npm. https://www.npmjs.com/package/react-native-reanimated
+Software Mansion. (2026a). *react-native-reanimated* (Version 4.5.1) [Computer software]. npm. https://www.npmjs.com/package/react-native-reanimated
+
+Software Mansion. (2026b). *react-native-screens* (Version 4.26.2) [Computer software]. npm. https://www.npmjs.com/package/react-native-screens
+
+Software Mansion. (2026c). *react-native-worklets* (Version 0.10.1) [Computer software]. npm. https://www.npmjs.com/package/react-native-worklets

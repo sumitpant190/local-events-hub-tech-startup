@@ -1,7 +1,8 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type AuthStackParamList = {
-  Login: undefined;
+  /** `signedUpEmail` is set after a successful signup: prefill it and confirm the account was created. */
+  Login: { signedUpEmail?: string } | undefined;
   Signup: undefined;
 };
 

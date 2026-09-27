@@ -109,10 +109,18 @@ export const useAuthStore = create<AuthState>()((set, get) => {
       if (!trimmedName || !isValidEmail(email) || password.length < MIN_PASSWORD_LENGTH) {
         return { ok: false, error: 'Please check your details and try again.' };
       }
-      return runAuthAction(
-        () => authService.signup(trimmedName, normalizeEmail(email), password),
-        "Couldn't create your account. Please try again.",
-      );
+      // Firebase signs the new account in automatically; sign it straight out so the user logs in
+      // explicitly afterwards. The flag keeps the listener from starting a session in between.
+      isAuthActionInFlight = true;
+      try {
+        await authService.signup(trimmedName, normalizeEmail(email), password);
+        await authService.logout();
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: getErrorMessage(error, "Couldn't create your account. Please try again.") };
+      } finally {
+        isAuthActionInFlight = false;
+      }
     },
 
     updateProfile: async (values) => {

@@ -664,3 +664,20 @@
 - **Comment listener cleanup** is enforced structurally (the subscribe return value is the `useEffect` cleanup in EventDetailsScreen). Its unsubscribe firing wasn't observed at runtime, because there's no listener introspection on the emulator.
 - **Lint debt left as-is (predates this phase):** 3 errors and 1 warning in files this phase didn't change (`AnimatedMessage`, `BottomSheetModal`: setState in an effect; `OfflineBanner:32`: an unescaped `'`; `navigation/types.ts`: an empty interface). ESLint had never been installed, so these had never been reported.
 - **Dev-only noise:** LogBox shows the Firebase SDK's warning log when the rules refuse a commit, and an existing `SafeAreaView` deprecation warning comes from a dependency. Neither appears in release builds.
+
+### Integration follow-up — signup returns to Login
+**Date:** 2026-09-27
+**Summary:** Signup no longer signs the user in. Firebase's `createUserWithEmailAndPassword` signs the new account in automatically, so the store now creates the account and the `users/{uid}` profile, signs straight out, and the app returns to Login. Login shows "Account created. Log in to continue." with the email filled in. This was requested so users log in explicitly after creating an account.
+**Files changed:**
+- Frontend/src/store/authStore.ts — `signup` creates the account and profile, then calls `logout()`; the in-flight flag keeps the auth listener from starting a session in between.
+- Frontend/src/screens/SignupScreen.tsx — on success, `popTo('Login', { signedUpEmail })`.
+- Frontend/src/screens/LoginScreen.tsx — prefills `signedUpEmail` (adjusted during render, not in an effect) and shows the success banner.
+- Frontend/src/components/AnimatedMessage.tsx — optional `tone: 'success'` using the contrast-checked primary tint (default is still `'error'`).
+- Frontend/src/navigation/types.ts — `Login: { signedUpEmail?: string } | undefined`.
+- README.md — signup behaviour, and where credentials live.
+**Commit:** `feat(auth): return to login after signup instead of auto sign-in`
+**Verified (Android emulator, Firebase emulators):**
+- Signing up `video.demo@test.dev` landed on Login with the banner and the email prefilled, and no session started.
+- Firestore has `users/vpGUC2Cq…` = `{name: "Video Demo", email: "video.demo@test.dev", role: "attendee", avatarUrl: ""}`.
+- Logging in with the new password opened Discover.
+- `tsc` is clean, and lint reports nothing new: the 2 hits in these files are the older `AnimatedMessage` and `navigation/types.ts` findings on shifted line numbers.

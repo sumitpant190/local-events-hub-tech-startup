@@ -9,7 +9,7 @@ import FadeInUp from '../components/FadeInUp';
 import FormField from '../components/FormField';
 import type { AuthStackParamList } from '../navigation/types';
 import { useAuthStore } from '../store/authStore';
-import { hasErrors, MIN_PASSWORD_LENGTH, validateSignup, type SignupValues } from '../utils/validation';
+import { hasErrors, MIN_PASSWORD_LENGTH, normalizeEmail, validateSignup, type SignupValues } from '../utils/validation';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Signup'>;
 
@@ -39,7 +39,12 @@ export default function SignupScreen({ navigation }: Props) {
     isSubmitting.current = true;
     const result = await signup(values.name, values.email, values.password);
     isSubmitting.current = false;
-    if (!result.ok) setFormError(result.error);
+    if (!result.ok) {
+      setFormError(result.error);
+      return;
+    }
+    // Signup doesn't sign in: back to Login (the screen below this one) with the email prefilled.
+    navigation.popTo('Login', { signedUpEmail: normalizeEmail(values.email) });
   };
 
   return (

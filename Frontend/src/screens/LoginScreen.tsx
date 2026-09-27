@@ -19,12 +19,24 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 const INITIAL_VALUES: LoginValues = { email: '', password: '' };
 
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen({ navigation, route }: Props) {
   const colors = useThemeColors();
   const login = useAuthStore((state) => state.login);
   const [values, setValues] = useState<LoginValues>(INITIAL_VALUES);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Arriving from a successful signup: prefill that email once per signup and confirm the account.
+  // (Adjusting state when a prop changes, during render: https://react.dev/learn/you-might-not-need-an-effect)
+  const signedUpEmail = route.params?.signedUpEmail;
+  const [prefilledFor, setPrefilledFor] = useState<string | undefined>(undefined);
+  if (signedUpEmail && signedUpEmail !== prefilledFor) {
+    setPrefilledFor(signedUpEmail);
+    setValues({ email: signedUpEmail, password: '' });
+    setHasSubmitted(false);
+    setFormError(null);
+  }
+  const signupNotice = signedUpEmail && !formError ? 'Account created. Log in to continue.' : null;
   const isSubmitting = useRef(false);
   const passwordRef = useRef<TextInput>(null);
 
@@ -55,6 +67,7 @@ export default function LoginScreen({ navigation }: Props) {
         <AuthFooterLink prompt="New here?" action="Create an account" onPress={() => navigation.navigate('Signup')} />
       }
     >
+      <AnimatedMessage message={signupNotice} variant="banner" tone="success" />
       <AnimatedMessage message={formError} variant="banner" />
 
       <FadeInUp index={3}>

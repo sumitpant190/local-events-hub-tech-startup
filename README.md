@@ -58,7 +58,7 @@ The app talks to Firebase directly (Auth + Firestore, JS SDK). There is no custo
 The emulator host is picked per platform: `10.0.2.2` on an Android emulator, `localhost` on an iOS simulator or web. **On a physical phone** (Expo Go on the same Wi-Fi), set `EXPO_PUBLIC_EMULATOR_HOST=<your computer's LAN IP>` in `Frontend/.env` and restart `npm start`. See `Frontend/.env.example`.
 
 **How the app uses Firebase:**
-- **Auth:** email/password through Firebase Auth. Sessions persist across restarts (AsyncStorage). Signup creates `users/{uid}` with `role: "attendee"` (see "Signup contract" below).
+- **Auth:** email/password through Firebase Auth. Sessions persist across restarts (AsyncStorage). Signup creates `users/{uid}` with `role: "attendee"` (see "Signup contract" below), then signs out and returns to Login with the email filled in, so the user logs in explicitly. Passwords are never stored by the app or in Firestore: Firebase Auth keeps only a salted hash, and the device keeps only session tokens.
 - **Events:** read from `events`, ordered by `date`. Opening an event refreshes it.
 - **RSVP:** one client-side transaction writes the RSVP and moves `attendeeCount` by ±1. The button disables while it's in flight.
 - **Comments:** a live `onSnapshot` listener while an event is open, removed when you leave. Posting runs a transaction that also increments `commentCount`.

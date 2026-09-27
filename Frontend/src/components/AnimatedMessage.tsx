@@ -8,12 +8,14 @@ import { typography } from '../theme/typography';
 type AnimatedMessageProps = {
   message?: string | null;
   variant?: 'inline' | 'banner';
+  /** Errors by default; 'success' for confirmations such as "Account created". */
+  tone?: 'error' | 'success';
 };
 
 const MESSAGE_ANIMATION_MS = 200;
 
 // Slides/fades an error in and out, animating to its measured height so nothing jumps.
-export default function AnimatedMessage({ message, variant = 'inline' }: AnimatedMessageProps) {
+export default function AnimatedMessage({ message, variant = 'inline', tone = 'error' }: AnimatedMessageProps) {
   const colors = useThemeColors();
   const [displayed, setDisplayed] = useState(message ?? '');
   const [contentHeight, setContentHeight] = useState(0);
@@ -25,6 +27,11 @@ export default function AnimatedMessage({ message, variant = 'inline' }: Animate
   }, [message]);
 
   const isBanner = variant === 'banner';
+  // Success reuses the primary tint pair, which is contrast-checked in both themes.
+  const palette =
+    tone === 'success'
+      ? { text: colors.primary, tint: colors.primaryTint, border: colors.primaryBorder }
+      : { text: colors.errorText, tint: colors.errorTint, border: colors.errorBorder };
 
   return (
     <MotiView
@@ -45,8 +52,8 @@ export default function AnimatedMessage({ message, variant = 'inline' }: Animate
           accessibilityLiveRegion="polite"
           style={[
             isBanner ? typography.label : typography.caption,
-            { color: colors.errorText },
-            isBanner && [styles.banner, { backgroundColor: colors.errorTint, borderColor: colors.errorBorder }],
+            { color: palette.text },
+            isBanner && [styles.banner, { backgroundColor: palette.tint, borderColor: palette.border }],
             !isBanner && styles.inline,
           ]}
         >

@@ -1,0 +1,273 @@
+{
+  "info": {
+    "name": "Local Events Hub — Firestore REST API",
+    "_postman_id": "5b0c7f0e-7d4a-4f5e-9a57-2f1c1d0e7a01",
+    "description": "There is no custom server. These requests call Firestore's native REST interface (`/v1/projects/{projectId}/databases/(default)/documents/{path}`), authenticated with a Firebase ID token (`Authorization: Bearer <idToken>`). Every request is checked by `Backend/firestore.rules`, so the rejected requests prove the rules are the access-control layer.\n\n**Default target: the local emulators** (`npm run emulators` then `npm run seed:emulator`). Run the folders in order: `0. Auth` stores `idToken` and `uid` for the rest.\n\n**Against the real project**, change the collection variables:\n- `firestoreBase` → `https://firestore.googleapis.com/v1`\n- `authBase` → `https://identitytoolkit.googleapis.com/v1`\n- `projectId` → your Firebase project id\n- `apiKey` → the Web API key from Project Settings\n- `email` / `password` → an account that exists in that project\n- `eventId` / `otherUserId` → document ids that exist there\n\nVerified on the emulators only. On production an invalid token is expected to return `401 UNAUTHENTICATED` and a rules denial returns `403 PERMISSION_DENIED` with `Missing or insufficient permissions.`; the emulator returns `400 INVALID_ARGUMENT` for a malformed token and a rule trace in the 403 message.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "firestoreBase", "value": "http://127.0.0.1:8080/v1" },
+    { "key": "authBase", "value": "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1" },
+    { "key": "projectId", "value": "demo-local-events-hub" },
+    { "key": "apiKey", "value": "fake-api-key", "description": "The Auth emulator accepts any key. For production, use the project's Web API key (not a secret)." },
+    { "key": "email", "value": "priya@student.uni.edu", "description": "Seeded attendee account (emulator only)." },
+    { "key": "password", "value": "startup123", "description": "Seeded demo password (emulator only)." },
+    { "key": "eventId", "value": "evt-01" },
+    { "key": "otherUserId", "value": "usr-01", "description": "A different user's uid, used for the wrong-user write." },
+    { "key": "idToken", "value": "", "description": "Set by 0. Auth / Sign in." },
+    { "key": "uid", "value": "", "description": "Set by 0. Auth / Sign in." }
+  ],
+  "item": [
+    {
+      "name": "0. Auth",
+      "item": [
+        {
+          "name": "Sign in (get ID token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns an idToken and localId', () => {",
+                  "  pm.expect(body.idToken).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.localId).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.collectionVariables.set('idToken', body.idToken);",
+                  "pm.collectionVariables.set('uid', body.localId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"returnSecureToken\": true\n}"
+            },
+            "url": "{{authBase}}/accounts:signInWithPassword?key={{apiKey}}",
+            "description": "Firebase Auth REST `signInWithPassword`. The `idToken` expires after 1 hour; re-run this request to refresh it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Allowed reads",
+      "item": [
+        {
+          "name": "GET a single event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('is the requested event document', () => {",
+                  "  pm.expect(body.name).to.match(new RegExp('/documents/events/' + pm.collectionVariables.get('eventId') + '$'));",
+                  "  pm.expect(body.fields.title.stringValue).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.fields.attendeeCount).to.have.property('integerValue');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{idToken}}" }],
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/events/{{eventId}}",
+            "description": "Rule: any signed-in user may read events."
+          }
+        },
+        {
+          "name": "GET (list) the events collection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a page of event documents', () => {",
+                  "  pm.expect(body.documents).to.be.an('array').and.not.empty;",
+                  "  pm.expect(body.documents.length).to.be.at.most(5);",
+                  "  body.documents.forEach((d) => pm.expect(d.name).to.include('/documents/events/'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{idToken}}" }],
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/events?pageSize=5",
+            "description": "Paged list. Pass the response's `nextPageToken` as `pageToken` for the next page."
+          }
+        },
+        {
+          "name": "GET my own user document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('is the signed-in user\\'s profile', () => {",
+                  "  pm.expect(body.name).to.match(new RegExp('/documents/users/' + pm.collectionVariables.get('uid') + '$'));",
+                  "  pm.expect(body.fields.email.stringValue).to.eql(pm.collectionVariables.get('email'));",
+                  "  pm.expect(body.fields.role.stringValue).to.eql('attendee');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{idToken}}" }],
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/users/{{uid}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Rejected by security rules",
+      "item": [
+        {
+          "name": "GET an event with no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 PERMISSION_DENIED', () => {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().error.status).to.eql('PERMISSION_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/events/{{eventId}}",
+            "description": "Unauthenticated: the rules require `request.auth != null` for every read."
+          }
+        },
+        {
+          "name": "GET an event with an invalid token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected before any data is returned (401 in production, 400 on the emulator)', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([400, 401]);",
+                  "  pm.expect(pm.response.json()).to.have.property('error');",
+                  "  pm.expect(pm.response.json()).to.not.have.property('fields');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer not-a-real-token" }],
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/events/{{eventId}}"
+          }
+        },
+        {
+          "name": "PATCH another user's profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 PERMISSION_DENIED', () => {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().error.status).to.eql('PERMISSION_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{idToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fields\": {\n    \"name\": { \"stringValue\": \"Hacked\" }\n  }\n}"
+            },
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/users/{{otherUserId}}?updateMask.fieldPaths=name",
+            "description": "Wrong-user write: a signed-in user may only update their own `users/{uid}`."
+          }
+        },
+        {
+          "name": "PATCH my own role to admin (self-promotion)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 PERMISSION_DENIED', () => {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().error.status).to.eql('PERMISSION_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{idToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fields\": {\n    \"role\": { \"stringValue\": \"admin\" }\n  }\n}"
+            },
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/users/{{uid}}?updateMask.fieldPaths=role",
+            "description": "Users may change their own `name`/`avatarUrl` only, never `role`."
+          }
+        },
+        {
+          "name": "GET my own user document (role unchanged)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('role is still attendee after the refused self-promotion', () => {",
+                  "  pm.expect(pm.response.json().fields.role.stringValue).to.eql('attendee');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{idToken}}" }],
+            "url": "{{firestoreBase}}/projects/{{projectId}}/databases/(default)/documents/users/{{uid}}"
+          }
+        }
+      ]
+    }
+  ]
+}

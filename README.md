@@ -3,7 +3,7 @@
 A mobile app for discovering local events. University group project, theme: **Tech & Startup**.
 
 - `Frontend/` — React Native app (Expo managed workflow, TypeScript)
-- `Backend/` — Firebase on the free Spark plan: Firestore security rules, emulator config, seed scripts, rules tests
+- `Backend/` — Firebase on the free Spark plan: Firestore security rules, emulator config, seed scripts, rules tests, Postman collection
 - `GIT_HISTORY.md` — phase-by-phase development log
 
 ## Tech stack
@@ -246,3 +246,200 @@ Everyone signs up as `attendee`. The Spark plan has no admin Cloud Function, so 
 - **Emulators:** do the same in the Emulator UI at http://127.0.0.1:4000/firestore.
 
 Console and Emulator UI edits go through the Admin API, so they aren't blocked by the rules that stop users from changing their own role. The user's app picks up the new role the next time it reads their profile.
+
+## API Documentation
+
+**There is no custom server.** The "API" is Firestore's own REST interface, which every Firestore database exposes over HTTPS automatically. The app uses the Firebase SDK, which talks to the same service. Every REST request is checked by the same `firestore.rules` as the app's requests, so the rules are the API's access control. There are no endpoints to deploy or host; they exist as soon as the database does.
+
+| | Production | Local emulators |
+|---|---|---|
+| Firestore base URL | `https://firestore.googleapis.com/v1` | `http://127.0.0.1:8080/v1` |
+| Auth base URL | `https://identitytoolkit.googleapis.com/v1` | `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1` |
+| Project id | your Firebase project id | `demo-local-events-hub` |
+
+A document path is `{base}/projects/{PROJECT_ID}/databases/(default)/documents/{path}`, authenticated with the header `Authorization: Bearer <Firebase ID token>`.
+
+### Postman collection
+
+`Backend/postman_collection.json` (Postman collection v2.1) holds every request below, with test assertions. It targets the emulators by default. To use it:
+
+1. Start the emulators and seed them (`npm run emulators`, then `npm run seed:emulator`).
+2. Either import the file into Postman (**Import → File**) and run the collection in order, or run it from `Backend/` with the Postman CLI:
+
+   ```bash
+   npx -y newman@6 run postman_collection.json
+   ```
+
+   Expected result: 9 requests, 14 assertions, 0 failed.
+
+For the real project, change the collection variables `firestoreBase`, `authBase`, `projectId`, `apiKey`, `email`/`password`, `eventId` and `otherUserId` (the collection description lists the values).
+
+### Getting an ID token
+
+The collection's first request does this for you and stores `idToken` and `uid` for the other requests. By hand, either:
+
+- **Firebase Auth REST `signInWithPassword`** (the ID token lasts 1 hour):
+
+  ```http
+  POST {authBase}/accounts:signInWithPassword?key={WEB_API_KEY}
+  Content-Type: application/json
+
+  { "email": "priya@student.uni.edu", "password": "startup123", "returnSecureToken": true }
+  ```
+
+  ```json
+  { "localId": "usr-05", "email": "priya@student.uni.edu", "idToken": "eyJhbGciOi…", "refreshToken": "…", "expiresIn": "3600" }
+  ```
+
+  The Web API key is in **Project Settings → General** (it's not a secret; see "Secrets" above). The Auth emulator accepts any key, e.g. `fake-api-key`. The seeded accounts exist only in the emulators.
+
+- **Copy one from the app during development:** after signing in, log `await auth.currentUser?.getIdToken()` and paste it into the `idToken` variable. Remove the log before committing.
+
+### Endpoints
+
+Responses use Firestore's typed JSON (`stringValue`, `integerValue`, `timestampValue`…). The examples are real emulator output from the seeded data, shortened with `…`.
+
+#### GET a single event: `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/events/{eventId}`
+
+Allowed for any signed-in user.
+
+```http
+GET /v1/projects/demo-local-events-hub/databases/(default)/documents/events/evt-01
+Authorization: Bearer {idToken}
+```
+
+```json
+{
+  "name": "projects/demo-local-events-hub/databases/(default)/documents/events/evt-01",
+  "fields": {
+    "title": { "stringValue": "Build Weekend: 48h AI Hackathon" },
+    "description": { "stringValue": "Form a team on Friday night, ship an AI-powered prototype by Sunday afternoon. …" },
+    "date": { "timestampValue": "2026-10-09T17:00:00Z" },
+    "location": { "stringValue": "The Foundry Co-working, 12 Market Street, 3rd Floor" },
+    "category": { "stringValue": "Hackathon" },
+    "organizerId": { "stringValue": "usr-04" },
+    "attendeeCount": { "integerValue": "2" },
+    "commentCount": { "integerValue": "2" },
+    "imageUrl": { "stringValue": "https://picsum.photos/seed/evt-01/800/450" }
+  },
+  "createTime": "2026-09-27T02:16:53.316255Z",
+  "updateTime": "2026-09-27T02:16:53.316255Z"
+}
+```
+
+#### List events: `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/events?pageSize=5`
+
+Allowed for any signed-in user. It returns up to `pageSize` documents; pass the response's `nextPageToken` as `pageToken` to get the next page.
+
+```http
+GET /v1/projects/demo-local-events-hub/databases/(default)/documents/events?pageSize=5
+Authorization: Bearer {idToken}
+```
+
+```json
+{
+  "documents": [
+    { "name": "projects/demo-local-events-hub/databases/(default)/documents/events/evt-01", "fields": { "title": { "stringValue": "Build Weekend: 48h AI Hackathon" }, "…": "…" } },
+    { "name": "projects/demo-local-events-hub/databases/(default)/documents/events/evt-02", "fields": { "…": "…" } }
+  ],
+  "nextPageToken": "…"
+}
+```
+
+#### GET my own user document: `GET {base}/projects/{PROJECT_ID}/databases/(default)/documents/users/{uid}`
+
+`{uid}` is the `localId` returned at sign-in.
+
+```http
+GET /v1/projects/demo-local-events-hub/databases/(default)/documents/users/usr-05
+Authorization: Bearer {idToken}
+```
+
+```json
+{
+  "name": "projects/demo-local-events-hub/databases/(default)/documents/users/usr-05",
+  "fields": {
+    "name": { "stringValue": "Priya Raman" },
+    "email": { "stringValue": "priya@student.uni.edu" },
+    "role": { "stringValue": "attendee" },
+    "avatarUrl": { "stringValue": "https://api.dicebear.com/9.x/initials/png?seed=Priya%20Raman" }
+  },
+  "createTime": "2026-09-27T02:16:53.316255Z",
+  "updateTime": "2026-09-27T02:16:53.316255Z"
+}
+```
+
+### Rejected requests (the rules at work)
+
+These are in the collection's **2. Rejected by security rules** folder. They show that the database refuses requests the rules don't allow, even though anyone can reach the URL.
+
+| Request | Why it's refused | Emulator (verified) | Production (expected, not verified here) |
+|---|---|---|---|
+| `GET …/events/evt-01` with **no** `Authorization` header | every read requires `request.auth != null` | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
+| `GET …/events/evt-01` with `Bearer not-a-real-token` | the token isn't a valid Firebase ID token | `400 INVALID_ARGUMENT` ("invalid jwt") | `401 UNAUTHENTICATED` |
+| `PATCH …/users/usr-01?updateMask.fieldPaths=name` as Priya (`usr-05`) | wrong-user write: users may only update their own profile | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
+| `PATCH …/users/usr-05?updateMask.fieldPaths=role` with `"admin"` as Priya | self-promotion: users can never change their own `role` | `403 PERMISSION_DENIED` | `403 PERMISSION_DENIED` |
+
+A follow-up `GET` of `users/usr-05` confirms `role` is still `attendee`. Example wrong-user write:
+
+```http
+PATCH /v1/projects/demo-local-events-hub/databases/(default)/documents/users/usr-01?updateMask.fieldPaths=name
+Authorization: Bearer {idToken of usr-05}
+Content-Type: application/json
+
+{ "fields": { "name": { "stringValue": "Hacked" } } }
+```
+
+```json
+{ "error": { "code": 403, "message": "\nfalse for 'create' @ L81, … false for 'update' @ L88, …", "status": "PERMISSION_DENIED" } }
+```
+
+That `message` is the emulator's rule trace, which helps with debugging. Production is expected to return the generic `Missing or insufficient permissions.` instead, with the same `status`, so the rule details don't leak.
+
+The full allowed/denied matrix (82 cases, SDK-based) is in `Backend/tests/` (`npm run test:emulator`).
+
+## References
+
+Axios contributors. (2026). *axios* (Version 1.20.0) [Computer software]. npm. https://www.npmjs.com/package/axios
+
+Expo. (2026). *expo* (Version 57.0.25) [Computer software]. npm. https://www.npmjs.com/package/expo
+
+Google. (n.d.-a). *Authentication REST API*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/reference/rest/auth
+
+Google. (n.d.-b). *Cloud Firestore*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/firestore
+
+Google. (n.d.-c). *Firebase Local Emulator Suite*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/emulator-suite
+
+Google. (n.d.-d). *Get started with Cloud Firestore Security Rules*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/firestore/security/get-started
+
+Google. (n.d.-e). *Transactions and batched writes*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/firestore/manage-data/transactions
+
+Google. (n.d.-f). *Use the Cloud Firestore REST API*. Firebase. Retrieved September 27, 2026, from https://firebase.google.com/docs/firestore/use-rest-api
+
+Google. (2026a). *firebase* (Version 12.19.0) [Computer software]. npm. https://www.npmjs.com/package/firebase
+
+Google. (2026b). *firebase-admin* (Version 14.5.0) [Computer software]. npm. https://www.npmjs.com/package/firebase-admin
+
+Google. (2026c). *@firebase/rules-unit-testing* (Version 5.0.2) [Computer software]. npm. https://www.npmjs.com/package/@firebase/rules-unit-testing
+
+Google. (2026d). *firebase-tools* (Version 15.31.0) [Computer software]. npm. https://www.npmjs.com/package/firebase-tools
+
+Meta Platforms. (2025). *react* (Version 19.2.3) [Computer software]. npm. https://www.npmjs.com/package/react
+
+Meta Platforms. (2026). *react-native* (Version 0.86.3) [Computer software]. npm. https://www.npmjs.com/package/react-native
+
+Microsoft. (2026). *typescript* (Version 7.0.2) [Computer software]. npm. https://www.npmjs.com/package/typescript
+
+Poimandres. (2026). *zustand* (Version 5.0.15) [Computer software]. npm. https://www.npmjs.com/package/zustand
+
+Postman. (2026). *newman* (Version 6.2.2) [Computer software]. npm. https://www.npmjs.com/package/newman
+
+React Native Community. (2025). *@react-native-async-storage/async-storage* (Version 2.2.0) [Computer software]. npm. https://www.npmjs.com/package/@react-native-async-storage/async-storage
+
+react-native-maps contributors. (2026). *react-native-maps* (Version 1.27.2) [Computer software]. npm. https://www.npmjs.com/package/react-native-maps
+
+React Navigation contributors. (2026). *@react-navigation/native* (Version 7.4.1) [Computer software]. npm. https://www.npmjs.com/package/@react-navigation/native
+
+Rojo, F. (2025). *moti* (Version 0.30.0) [Computer software]. npm. https://www.npmjs.com/package/moti
+
+Software Mansion. (2026). *react-native-reanimated* (Version 4.5.1) [Computer software]. npm. https://www.npmjs.com/package/react-native-reanimated

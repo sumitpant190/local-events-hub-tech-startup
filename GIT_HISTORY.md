@@ -516,3 +516,24 @@
 - **Known limit (accepted):** comment ids are random, so the event rule can't check that a comment exists in the same commit. A tampered client can nudge `commentCount` by ±1 per write (never below 0) without commenting. Legitimate clients can't drift, because every comment create and delete must carry the ±1. Closing the gap would need a Cloud Function trigger (Blaze, not allowed) or deterministic comment ids, which can collide after deletes. It's accepted because the count is display-only.
 - **Deleting a comment on a deleted event** is refused, because the counter check has no event to read. Orphaned comments are cleaned up from the Console. This is the same orphan issue as noted in Phase 4.
 - **Blaze check:** `onSnapshot`, client transactions and rules only; no Cloud Functions, and nothing needs Blaze.
+
+## Phase 7 — Testing & API docs
+**Date:** 2026-09-27
+**Summary:** The Postman/API-docs requirement is met without a custom server. Firestore already exposes every database over HTTPS (`/v1/projects/{id}/databases/(default)/documents/{path}`, `Authorization: Bearer <ID token>`), guarded by the same `firestore.rules`. Added a Postman collection that signs in, performs the allowed reads, and shows the rules refusing requests. Also added an API Documentation section and APA 7 references to the README.
+**Files added/changed:**
+- Backend/postman_collection.json — new (Postman v2.1), targets the emulators by default:
+  - `0. Auth`: Firebase Auth REST `signInWithPassword`; stores `idToken` and `uid`;
+  - `1. Allowed reads`: GET `events/evt-01`, list `events?pageSize=5`, GET own `users/{uid}`;
+  - `2. Rejected by security rules`: GET with no token (403), GET with an invalid token (400 emulator / 401 production), PATCH another user's profile (403), PATCH own `role` to `admin` (403), then GET own profile to confirm `role` is still `attendee`;
+  - every request has `pm.test` assertions; variables switch it to the real project.
+- README.md — "API Documentation": why it's Firestore's native REST interface, base URLs (production and emulator), how to run the collection (Postman or `newman`), two ways to get an ID token, each endpoint with an example request and real emulator response, and the rejected-requests table. "References": APA 7 entries for the Firebase docs and the npm packages used (backend and frontend).
+**Commit:** `docs(api): add Firestore REST Postman collection, API docs and APA references`
+**Verified:**
+- `npx -y newman@6 run postman_collection.json` against freshly seeded emulators: **9 requests, 14 assertions, 0 failed**, twice in a row (nothing in the collection writes data, so re-runs are stable).
+- Example responses in the README were captured from the same emulator run.
+**Notes/decisions:**
+- **Emulator vs production differences:** a malformed token returns `400 INVALID_ARGUMENT` on the emulator; production is expected to return `401 UNAUTHENTICATED`, so that test accepts either. The emulator's 403 `message` is a rule trace; production is expected to return the generic "Missing or insufficient permissions.". The production behaviour is from Firebase's docs and wasn't run here (no real project data yet); the README labels it "expected".
+- **Credentials in the collection:** only the seeded emulator demo account (already documented in the README). `idToken` starts empty and is filled at run time; no service account or real token is committed.
+- **newman isn't a devDependency:** it's run on demand with `npx`, which keeps the backend install unchanged.
+- **APA publish years** come from the npm registry publish date of each installed version. Firebase documentation pages have no publication date, so they are cited as "n.d." with a retrieval date.
+- **Blaze check:** REST calls against Firestore and Auth only; nothing needs Blaze.

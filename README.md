@@ -563,15 +563,15 @@ Production response. The emulator returns a rule trace in `message` instead, wit
 
 ## 10. Team Roles & Contributions
 
-<!-- TODO: fill in manually. Do not leave placeholder rows in the submitted version. -->
-
 | Name | Role | Key Contributions |
 |---|---|---|
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
-| TODO | TODO | TODO |
+| Mahendra Buda | developer | _e.g. Screens & navigation: Login, Signup, Events List, Event Details, Profile, Settings (`Frontend/src/screens`, `Frontend/src/navigation`)_ |
+| Rajbir Singh | developer and uix | _e.g. UI components & theming: reusable components, dark mode, animations (`Frontend/src/components`, `Frontend/src/theme`)_ |
+| Arshdeep Singh | developer and backend | _e.g. Firebase backend & security: Firestore rules, role management, emulator tests (`Backend/firestore.rules`, `Backend/tests`)_ |
+| Jasveer Singh | developer and database | _e.g. Data & state: services, Zustand stores, RSVP/comments real-time logic, offline cache, seed data (`Frontend/src/services`, `Frontend/src/store`, `Backend/scripts`)_ |
+| Sumit Pant | Repository & Submission Lead | Set up the GitHub repository and pushed the full commit history; produced the Firebase database export (`firebase-export/`); verified the local setup guide on Windows and fixed emulator access for physical devices (`Backend/firebase.json`); finalised README documentation |
 
+All commits were made from a single shared local repository and so appear under one Git author. Contributions above are as agreed by the team.
 ---
 
 
